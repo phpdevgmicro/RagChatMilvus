@@ -21,7 +21,7 @@ export async function generateChatResponse(
       : `User Question: ${query}\n\nPlease provide a comprehensive and helpful answer.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -32,7 +32,7 @@ export async function generateChatResponse(
           content: prompt
         }
       ],
-      max_tokens: 1000,
+        max_completion_tokens: 1000,
     });
 
     const content = response.choices[0].message.content || "";
