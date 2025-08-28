@@ -48,14 +48,12 @@ export function Sidebar({
         
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <i className="fas fa-database text-secondary text-sm"></i>
-            <span className="text-sm text-foreground">Milvus Vector DB</span>
+            <i className="fas fa-memory text-secondary text-sm"></i>
+            <span className="text-sm text-foreground">Vector Storage</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className={`w-2 h-2 rounded-full ${connectionStatus?.milvus ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
-            <span className={`text-xs font-medium ${connectionStatus?.milvus ? 'text-accent' : 'text-destructive'}`}>
-              {connectionStatus?.milvus ? 'Connected' : 'Disconnected'}
-            </span>
+            <div className="w-2 h-2 rounded-full bg-accent status-indicator"></div>
+            <span className="text-xs font-medium text-accent">In-Memory</span>
           </div>
         </div>
 
@@ -143,9 +141,9 @@ export function Sidebar({
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Collection Size</span>
+            <span className="text-xs text-muted-foreground">Memory Size</span>
             <span className="text-sm font-medium text-foreground" data-testid="text-collection-size">
-              {dbStats?.collectionSize || "Unknown"}
+              {dbStats?.collectionSize || "0.0 KB"}
             </span>
           </div>
           
@@ -154,6 +152,16 @@ export function Sidebar({
             <span className="text-sm font-medium text-foreground" data-testid="text-last-updated">
               {dbStats?.lastUpdated || "Never"}
             </span>
+          </div>
+          
+          <div className="p-3 bg-muted/50 rounded-md">
+            <div className="flex items-center gap-2 mb-1">
+              <i className="fas fa-info-circle text-accent text-sm"></i>
+              <span className="text-xs font-medium text-foreground">Memory Storage</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vectors stored in-memory. Data resets on server restart.
+            </p>
           </div>
         </div>
 
