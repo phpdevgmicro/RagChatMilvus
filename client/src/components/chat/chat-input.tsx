@@ -39,10 +39,10 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   };
 
   return (
-    <div className="p-3 sm:p-4 bg-background border-t shadow-lg">
+    <div className="p-3 sm:p-4 bg-background/95 backdrop-blur-xl border-t border-border/30 shadow-xl">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-card rounded-lg sm:rounded-xl border border-border/50 shadow-sm overflow-hidden">
-          <div className="flex gap-2 p-2 sm:p-3">
+        <div className="bg-card/90 backdrop-blur-sm rounded-2xl border border-border/30 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+          <div className="flex gap-3 p-3 sm:p-4">
             <div className="flex-1">
               <Textarea
                 ref={textareaRef}
@@ -54,7 +54,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
                 }}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                className="min-h-[44px] sm:min-h-[48px] max-h-32 resize-none border-0 focus:ring-0 focus-visible:ring-0 bg-transparent p-0 text-sm placeholder:text-muted-foreground/60"
+                className="min-h-[48px] sm:min-h-[52px] max-h-32 resize-none border-0 focus:ring-0 focus-visible:ring-0 bg-transparent p-2 text-sm sm:text-base placeholder:text-muted-foreground/70 font-medium"
                 data-testid="textarea-message-input"
               />
             </div>
@@ -63,7 +63,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
               onClick={handleSubmit}
               disabled={!message.trim() || isLoading}
               size="sm"
-              className="shrink-0 h-9 w-9 sm:h-10 sm:w-10 p-0 rounded-lg"
+              className="shrink-0 h-10 w-10 sm:h-12 sm:w-12 p-0 rounded-xl bg-gradient-to-br from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50"
               data-testid="button-send-message"
             >
               {isLoading ? (

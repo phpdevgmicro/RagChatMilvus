@@ -183,6 +183,23 @@ class QdrantService {
     }
   }
 
+  async deleteVector(vectorId: string): Promise<void> {
+    if (!this.isConnected || !this.client) {
+      throw new Error("Qdrant is not connected. Please ensure QDRANT_URL and QDRANT_API_KEY are configured.");
+    }
+
+    try {
+      await this.client.delete(COLLECTION_NAME, {
+        wait: true,
+        points: [vectorId],
+      });
+      console.log(`Deleted vector with ID: ${vectorId}`);
+    } catch (error) {
+      console.error("Failed to delete vector from Qdrant:", error);
+      throw error;
+    }
+  }
+
   getConnectionStatus(): boolean {
     return this.isConnected;
   }

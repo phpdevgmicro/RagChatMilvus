@@ -54,29 +54,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       chatMessages.push(userMessage);
 
-      // Generate AI response first for faster user experience
-      const aiResponsePromise = generateChatResponse(content, "", {
+      // First, search vector database for context
+      let contextFromPreviousChats = "";
+      try {
+        const queryEmbedding = await generateEmbedding(content);
+        const similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 3);
+        
+        if (similarResults.length > 0) {
+          contextFromPreviousChats = similarResults.map((result, index) => 
+            `Previous Context ${index + 1} (similarity: ${(result.similarity * 100).toFixed(1)}%):\nQ: ${result.query}\nA: ${result.response}\n`
+          ).join("\n");
+        }
+      } catch (error) {
+        console.error("Error searching vector database:", error);
+      }
+
+      // Generate AI response with context from semantic search
+      const aiResponse = await generateChatResponse(content, contextFromPreviousChats, {
         temperature,
         model,
         maxTokens,
       });
-
-      // Search vector database in parallel for potential context (for future responses)
-      const vectorSearchPromise = (async () => {
-        try {
-          const queryEmbedding = await generateEmbedding(content);
-          return await qdrantService.searchSimilar(queryEmbedding, 0.7, 3); // Reduced from 5 to 3 for speed
-        } catch (error) {
-          console.error("Error searching vector database:", error);
-          return [];
-        }
-      })();
-
-      // Wait for AI response (priority)
-      const aiResponse = await aiResponsePromise;
-
-      // Get vector results (optional for context)
-      const similarResults = await vectorSearchPromise;
 
       // Use the saveToVector flag directly from user input
       const shouldSaveToVector = saveToVector;
@@ -152,6 +150,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               sources: message.sources || [],
               timestamp: new Date().toISOString(),
             });
+          }
+        } else {
+          // Remove from vector database when unchecked
+          const messageIndex = chatMessages.findIndex((m) => m.id === id);
+          const userMessage =
+            messageIndex > 0 ? chatMessages[messageIndex - 1] : null;
+
+          if (userMessage && userMessage.role === "user") {
+            // Search for similar vectors to find and delete the specific one
+            try {
+              const embedding = await generateEmbedding(message.content);
+              const similarResults = await qdrantService.searchSimilar(embedding, 0.95, 5);
+              
+              // Find the exact match by comparing the response content
+              const exactMatch = similarResults.find(result => 
+                result.response.trim() === message.content.trim() && 
+                result.query.trim() === userMessage.content.trim()
+              );
+              
+              if (exactMatch) {
+                await qdrantService.deleteVector(exactMatch.id);
+              }
+            } catch (error) {
+              console.error("Error deleting from vector database:", error);
+            }
           }
         }
       }

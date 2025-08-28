@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Bot, User, Copy } from "lucide-react";
+import { Bot, User, Copy, Loader2, Check, X } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -20,9 +20,10 @@ interface MessageListProps {
   onToggleVectorSave: (messageId: string, saveToVector: boolean) => void;
   isUpdating: boolean;
   isTyping: boolean;
+  updatingMessageId?: string;
 }
 
-export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdating, isTyping }: MessageListProps) {
+export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdating, isTyping, updatingMessageId }: MessageListProps) {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -40,8 +41,8 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" data-testid="message-list">
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-8">
+    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" data-testid="message-list">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-6">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-4 sm:space-y-6 px-4">
             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl flex items-center justify-center">
@@ -59,47 +60,58 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex gap-4 group ${
+            className={`flex gap-3 sm:gap-4 group transition-all duration-200 hover:bg-muted/30 rounded-lg p-2 -mx-2 message-bubble ${
               message.role === "user" ? "flex-row-reverse" : ""
             }`}
           >
-            <Avatar className="w-9 h-9 shrink-0">
-              <AvatarFallback className={message.role === "user" ? "bg-primary/15 border border-primary/20" : "bg-muted border border-border"}>
+            <Avatar className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 shadow-sm">
+              <AvatarFallback className={message.role === "user" ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border border-primary/20" : "bg-gradient-to-br from-muted to-muted/80 border border-border/50"}>
                 {message.role === "user" ? (
-                  <User className="h-4 w-4 text-primary" />
+                  <User className="h-4 w-4" />
                 ) : (
                   <Bot className="h-4 w-4 text-muted-foreground" />
                 )}
               </AvatarFallback>
             </Avatar>
             
-            <div className={`flex-1 max-w-[80%] space-y-2 ${
+            <div className={`flex-1 max-w-[75%] space-y-2 ${
               message.role === "user" ? "flex flex-col items-end" : ""
             }`}>
-              <Card className={`${
+              <Card className={`transition-all duration-200 ${
                 message.role === "user" 
-                  ? "bg-primary text-primary-foreground shadow-sm border-primary/20" 
-                  : "bg-card border border-border/50 shadow-sm"
+                  ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-md border-primary/20 hover:shadow-lg" 
+                  : "bg-card/80 backdrop-blur-sm border border-border/30 shadow-sm hover:shadow-md hover:border-border/50"
               }`}>
-                <div className="p-4">
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`message-content-${message.id}`}>
+                <div className="p-3 sm:p-4">
+                  <div className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-medium" data-testid={`message-content-${message.id}`}>
                     {message.content}
                   </div>
               
                   {message.role === "assistant" && (
                     <div className="space-y-3 pt-3 mt-3 border-t border-border/30">
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`save-${message.id}`}
-                          checked={message.savedToVector || false}
-                          onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
-                          disabled={isUpdating}
-                          className="w-3 h-3 text-primary bg-transparent border border-input rounded-sm focus:ring-1 focus:ring-primary"
-                          data-testid={`checkbox-save-${message.id}`}
-                        />
-                        <Label htmlFor={`save-${message.id}`} className="text-xs cursor-pointer text-muted-foreground">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            id={`save-${message.id}`}
+                            checked={message.savedToVector || false}
+                            onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
+                            disabled={isUpdating && updatingMessageId === message.id}
+                            className="w-3 h-3 text-primary bg-transparent border border-input rounded-sm focus:ring-1 focus:ring-primary"
+                            data-testid={`checkbox-save-${message.id}`}
+                          />
+                          {isUpdating && updatingMessageId === message.id && (
+                            <Loader2 className="absolute inset-0 w-3 h-3 animate-spin text-primary" />
+                          )}
+                        </div>
+                        <Label htmlFor={`save-${message.id}`} className="text-xs cursor-pointer text-muted-foreground flex items-center gap-1">
                           Save to vector database
+                          {isUpdating && updatingMessageId === message.id && (
+                            <span className="text-xs text-primary">Updating...</span>
+                          )}
+                          {!isUpdating && message.savedToVector && (
+                            <Check className="w-3 h-3 text-green-500" />
+                          )}
                         </Label>
                       </div>
                       <div className="flex items-center justify-between">
