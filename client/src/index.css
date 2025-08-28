@@ -4,51 +4,51 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(248, 250, 252);
-  --foreground: hsl(15, 23, 42);
-  --card: hsl(255, 255, 255);
-  --card-foreground: hsl(15, 23, 42);
-  --popover: hsl(255, 255, 255);
-  --popover-foreground: hsl(15, 23, 42);
-  --primary: hsl(37, 99, 235);
-  --primary-foreground: hsl(248, 250, 252);
-  --secondary: hsl(100, 116, 139);
-  --secondary-foreground: hsl(248, 250, 252);
-  --muted: hsl(241, 245, 249);
-  --muted-foreground: hsl(100, 116, 139);
-  --accent: hsl(16, 185, 129);
-  --accent-foreground: hsl(255, 255, 255);
-  --destructive: hsl(239, 68, 68);
-  --destructive-foreground: hsl(248, 250, 252);
-  --border: hsl(226, 232, 240);
-  --input: hsl(255, 255, 255);
-  --ring: hsl(37, 99, 235);
-  --radius: 0.5rem;
+  --background: hsl(250, 100%, 98%);
+  --foreground: hsl(220, 13%, 18%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(220, 13%, 18%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(220, 13%, 18%);
+  --primary: hsl(221, 83%, 53%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(220, 14%, 96%);
+  --secondary-foreground: hsl(220, 9%, 46%);
+  --muted: hsl(220, 14%, 96%);
+  --muted-foreground: hsl(220, 9%, 46%);
+  --accent: hsl(142, 76%, 36%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(220, 13%, 91%);
+  --input: hsl(220, 13%, 97%);
+  --ring: hsl(221, 83%, 53%);
+  --radius: 0.75rem;
   --font-sans: 'Inter', sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
 }
 
 .dark {
-  --background: hsl(0, 0, 0);
-  --foreground: hsl(200, 6.6667%, 91.1765%);
-  --card: hsl(228, 9.8039%, 10%);
-  --card-foreground: hsl(0, 0%, 85.0980%);
-  --popover: hsl(0, 0%, 0%);
-  --popover-foreground: hsl(200, 6.6667%, 91.1765%);
-  --primary: hsl(203.7736, 87.6033%, 52.5490%);
-  --primary-foreground: hsl(0, 0%, 100%);
-  --secondary: hsl(195.0000, 15.3846%, 94.9020%);
-  --secondary-foreground: hsl(210, 25%, 7.8431%);
-  --muted: hsl(0, 0%, 9.4118%);
-  --muted-foreground: hsl(210, 3.3898%, 46.2745%);
-  --accent: hsl(205.7143, 70%, 7.8431%);
-  --accent-foreground: hsl(203.7736, 87.6033%, 52.5490%);
-  --destructive: hsl(356.3033, 90.5579%, 54.3137%);
-  --destructive-foreground: hsl(0, 0%, 100%);
-  --border: hsl(210, 5.2632%, 14.9020%);
-  --input: hsl(207.6923, 27.6596%, 18.4314%);
-  --ring: hsl(202.8169, 89.1213%, 53.1373%);
+  --background: hsl(222, 84%, 5%);
+  --foreground: hsl(210, 40%, 98%);
+  --card: hsl(222, 47%, 11%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --popover: hsl(222, 47%, 11%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(222, 84%, 5%);
+  --secondary: hsl(217, 33%, 17%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --muted: hsl(217, 33%, 17%);
+  --muted-foreground: hsl(215, 20%, 65%);
+  --accent: hsl(142, 76%, 36%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 63%, 60%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(217, 33%, 17%);
+  --input: hsl(217, 33%, 17%);
+  --ring: hsl(224, 76%, 78%);
 }
 
 @layer base {
@@ -64,17 +64,17 @@
 
 /* Custom animations */
 .chat-message {
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -87,8 +87,38 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.6;
   }
+}
+
+/* Fade in animation for sidebar */
+.sidebar-fade-in {
+  animation: fadeInSlide 0.3s ease-out;
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Button hover effects */
+.button-hover-lift {
+  transition: all 0.2s ease;
+}
+
+.button-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dark .button-hover-lift:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Custom scrollbar */
@@ -107,4 +137,54 @@
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--foreground));
+}
+
+/* Custom slider styling */
+.slider {
+  background: linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) var(--value, 70%), hsl(var(--muted)) var(--value, 70%), hsl(var(--muted)) 100%);
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Message bubble animations */
+.message-bubble {
+  animation: messageSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Glassmorphism effects */
+.glass-effect {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Focus states */
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px hsla(var(--primary), 0.2);
 }

@@ -5,6 +5,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 import { VectorSearchModal } from "@/components/chat/vector-search-modal";
 import { MemorySuggestion } from "@/components/chat/memory-suggestion";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
@@ -24,6 +25,7 @@ interface ChatResponse {
 
 export default function Chat() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [autoSave, setAutoSave] = useState(false);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
   const [maxContextLength, setMaxContextLength] = useState(4096);
@@ -166,36 +168,71 @@ export default function Chat() {
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar
-        connectionStatus={connectionStatus}
-        dbStats={dbStats}
-        autoSave={autoSave}
-        setAutoSave={setAutoSave}
-        similarityThreshold={similarityThreshold}
-        setSimilarityThreshold={setSimilarityThreshold}
-        maxContextLength={maxContextLength}
-        setMaxContextLength={setMaxContextLength}
-        onClearDatabase={handleClearDatabase}
-        clearingDatabase={clearDatabaseMutation.isPending}
-        onSearchSimilar={() => setIsSearchModalOpen(true)}
-      />
+      {/* Mobile backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+      
+      {/* Sidebar */}
+      <div className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed lg:relative lg:translate-x-0 z-50 lg:z-auto transition-transform duration-300 ease-in-out sidebar-fade-in`}>
+        <Sidebar
+          connectionStatus={connectionStatus}
+          dbStats={dbStats}
+          autoSave={autoSave}
+          setAutoSave={setAutoSave}
+          similarityThreshold={similarityThreshold}
+          setSimilarityThreshold={setSimilarityThreshold}
+          maxContextLength={maxContextLength}
+          setMaxContextLength={setMaxContextLength}
+          onClearDatabase={handleClearDatabase}
+          clearingDatabase={clearDatabaseMutation.isPending}
+          onSearchSimilar={() => setIsSearchModalOpen(true)}
+          onClose={() => setIsSidebarOpen(false)}
+          isOpen={isSidebarOpen}
+        />
+      </div>
       
       <div className="flex-1 flex flex-col">
-        <div className="px-6 py-4 bg-card border-b border-border">
+        {/* Header */}
+        <div className="px-4 lg:px-6 py-4 bg-card/50 backdrop-blur-sm border-b border-border/50 sticky top-0 z-30">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Knowledge Chat</h2>
-              <p className="text-sm text-muted-foreground">Ask questions and get AI-powered responses with context</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors"
+                data-testid="button-toggle-sidebar"
+              >
+                <i className="fas fa-bars text-foreground"></i>
+              </button>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">AI Assistant</h2>
+                <p className="text-sm text-muted-foreground hidden sm:block">Intelligent conversations with memory</p>
+              </div>
             </div>
             
-            <button
-              className="px-4 py-2 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors flex items-center gap-2"
-              onClick={() => setIsSearchModalOpen(true)}
-              data-testid="button-search-similar"
-            >
-              <i className="fas fa-search"></i>
-              Search Similar
-            </button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              
+              <button
+                className="px-3 py-2 text-sm bg-secondary/80 text-secondary-foreground rounded-lg hover:bg-secondary transition-colors flex items-center gap-2 button-hover-lift"
+                onClick={() => setIsSearchModalOpen(true)}
+                data-testid="button-search-similar"
+              >
+                <i className="fas fa-search text-xs"></i>
+                <span className="hidden sm:inline">Search</span>
+              </button>
+              
+              {/* Connection status indicator */}
+              <div className="flex items-center gap-1">
+                <div className={`w-2 h-2 rounded-full ${connectionStatus?.openai ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  {connectionStatus?.openai ? 'Online' : 'Offline'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
