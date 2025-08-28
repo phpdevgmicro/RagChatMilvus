@@ -3,7 +3,6 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateChatResponse, generateEmbedding, checkOpenAIConnection } from "./services/openai";
 import { milvusService } from "./services/milvus";
-import { mcpClient } from "./services/mcp";
 import { evaluateMemoryValue } from "./services/memory-evaluator";
 import { insertChatMessageSchema } from "@shared/schema";
 
@@ -12,7 +11,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize services
   try {
     await milvusService.connect();
-    await mcpClient.connect();
   } catch (error) {
     console.error("Service initialization error:", error);
   }
@@ -46,17 +44,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         similarityScore: null,
       });
 
-      // Get context from MCP server
-      const mcpResponse = await mcpClient.retrieveContext(content);
-      
       // Generate AI response
-      const aiResponse = await generateChatResponse(content, mcpResponse.context);
+      const aiResponse = await generateChatResponse(content);
 
       // Evaluate memory value using intelligent system
       const memoryDecision = await evaluateMemoryValue(
         content, 
         aiResponse.content, 
-        mcpResponse.context
+        ""
       );
 
       let shouldSaveToVector = saveToVector;
@@ -110,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         userMessage,
         assistantMessage,
-        sources: mcpResponse.sources,
+        sources: aiResponse.sources,
         memoryDecision: userDecision === null ? memoryDecision : null,
       });
     } catch (error) {
@@ -196,7 +191,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const status = {
         milvus: milvusService.getConnectionStatus(),
-        mcp: mcpClient.getConnectionStatus(),
         openai: openaiStatus.status === "fulfilled" ? openaiStatus.value : false,
       };
 

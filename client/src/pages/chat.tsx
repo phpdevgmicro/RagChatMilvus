@@ -43,7 +43,6 @@ export default function Chat() {
   // Fetch connection status
   const { data: connectionStatus } = useQuery<{
     milvus: boolean;
-    mcp: boolean;
     openai: boolean;
   }>({
     queryKey: ["/api/status"],

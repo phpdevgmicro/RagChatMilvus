@@ -1,7 +1,6 @@
 interface SidebarProps {
   connectionStatus?: {
     milvus: boolean;
-    mcp: boolean;
     openai: boolean;
   };
   dbStats?: {
@@ -60,18 +59,6 @@ export function Sidebar({
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <i className="fas fa-server text-secondary text-sm"></i>
-            <span className="text-sm text-foreground">MCP Server</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className={`w-2 h-2 rounded-full ${connectionStatus?.mcp ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
-            <span className={`text-xs font-medium ${connectionStatus?.mcp ? 'text-accent' : 'text-destructive'}`}>
-              {connectionStatus?.mcp ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-        </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

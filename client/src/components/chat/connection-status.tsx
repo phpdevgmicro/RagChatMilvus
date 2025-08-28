@@ -1,7 +1,6 @@
 interface ConnectionStatusProps {
   status?: {
     milvus: boolean;
-    mcp: boolean;
     openai: boolean;
   };
 }
@@ -13,12 +12,6 @@ export function ConnectionStatus({ status }: ConnectionStatusProps) {
       icon: "fas fa-database",
       connected: status?.milvus,
       key: "milvus",
-    },
-    {
-      name: "MCP Server",
-      icon: "fas fa-server",
-      connected: status?.mcp,
-      key: "mcp",
     },
     {
       name: "OpenAI API",
