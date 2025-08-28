@@ -1,7 +1,5 @@
 import { MilvusClient } from "@zilliz/milvus2-sdk-node";
 import type { VectorResponse } from "@shared/schema";
-import { storage } from '../storage';
-import { randomUUID } from 'crypto';
 
 const COLLECTION_NAME = "chat_responses";
 const VECTOR_DIM = 1536; // OpenAI embedding dimension
