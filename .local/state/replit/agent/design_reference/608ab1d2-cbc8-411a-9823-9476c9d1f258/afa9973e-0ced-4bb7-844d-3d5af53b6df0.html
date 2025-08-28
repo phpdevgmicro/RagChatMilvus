@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chatbot - AI Knowledge Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: 248 250 252;
+            --foreground: 15 23 42;
+            --card: 255 255 255;
+            --card-foreground: 15 23 42;
+            --primary: 37 99 235;
+            --primary-foreground: 248 250 252;
+            --secondary: 100 116 139;
+            --secondary-foreground: 248 250 252;
+            --muted: 241 245 249;
+            --muted-foreground: 100 116 139;
+            --accent: 16 185 129;
+            --accent-foreground: 255 255 255;
+            --destructive: 239 68 68;
+            --destructive-foreground: 248 250 252;
+            --border: 226 232 240;
+            --input: 255 255 255;
+            --ring: 37 99 235;
+            --radius: 0.5rem;
+        }
+
+        .chat-message {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .toggle-switch {
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch:checked {
+            background-color: hsl(var(--accent));
+        }
+
+        .status-indicator {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-background text-foreground font-sans">
+    <!-- @COMPONENT: MainLayout [Main application layout with sidebar and chat area] -->
+    <div class="flex h-screen bg-background">
+        
+        <!-- @COMPONENT: Sidebar [Configuration and status panel] -->
+        <div class="w-80 bg-card border-r border-border flex flex-col">
+            <!-- Header -->
+            <div class="p-6 border-b border-border">
+                <h1 class="text-xl font-semibold text-foreground flex items-center gap-2">
+                    <i class="fas fa-robot text-primary"></i>
+                    RAG Chatbot
+                </h1>
+                <p class="text-sm text-muted-foreground mt-1">AI Knowledge Assistant</p>
+            </div>
+
+            <!-- Status Section -->
+            <!-- @COMPONENT: ConnectionStatus [Shows connection status for various services] -->
+            <div class="p-4 border-b border-border">
+                <h3 class="text-sm font-medium text-foreground mb-3">Connection Status</h3>
+                
+                <!-- Milvus Status -->
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-database text-secondary text-sm"></i>
+                        <span class="text-sm text-foreground">Milvus Vector DB</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 rounded-full bg-accent status-indicator"></div>
+                        <span class="text-xs text-accent font-medium" data-bind="milvus.status">Connected</span>
+                    </div>
+                </div>
+
+                <!-- MCP Server Status -->
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-server text-secondary text-sm"></i>
+                        <span class="text-sm text-foreground">MCP Server</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 rounded-full bg-accent status-indicator"></div>
+                        <span class="text-xs text-accent font-medium" data-bind="mcp.status">Connected</span>
+                    </div>
+                </div>
+
+                <!-- OpenAI Status -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-brain text-secondary text-sm"></i>
+                        <span class="text-sm text-foreground">OpenAI API</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 rounded-full bg-accent status-indicator"></div>
+                        <span class="text-xs text-accent font-medium" data-bind="openai.status">Connected</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <!-- @COMPONENT: Settings [Configuration options for the chatbot] -->
+            <div class="p-4 border-b border-border">
+                <h3 class="text-sm font-medium text-foreground mb-3">Settings</h3>
+                
+                <!-- Auto-save Toggle -->
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <label class="text-sm text-foreground font-medium">Auto-save Responses</label>
+                        <p class="text-xs text-muted-foreground">Automatically save all responses to vector DB</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" class="sr-only peer" data-bind="settings.autoSave">
+                        <div class="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                    </label>
+                </div>
+
+                <!-- Vector Search Similarity Threshold -->
+                <div class="mb-3">
+                    <label class="text-sm text-foreground font-medium block mb-2">Similarity Threshold</label>
+                    <input type="range" min="0" max="1" step="0.1" value="0.7" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer" data-bind="settings.similarityThreshold">
+                    <div class="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>0.0</span>
+                        <span data-bind="settings.similarityThresholdValue">0.7</span>
+                        <span>1.0</span>
+                    </div>
+                </div>
+
+                <!-- Max Context Length -->
+                <div class="mb-3">
+                    <label class="text-sm text-foreground font-medium block mb-2">Max Context Length</label>
+                    <select class="w-full px-3 py-2 text-sm bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" data-bind="settings.maxContextLength">
+                        <option value="2048">2,048 tokens</option>
+                        <option value="4096" selected>4,096 tokens</option>
+                        <option value="8192">8,192 tokens</option>
+                        <option value="16384">16,384 tokens</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Vector Database Stats -->
+            <!-- @COMPONENT: DatabaseStats [Display database statistics and metrics] -->
+            <div class="p-4 flex-1">
+                <h3 class="text-sm font-medium text-foreground mb-3">Vector Database</h3>
+                
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-muted-foreground">Total Responses</span>
+                        <span class="text-sm font-medium text-foreground" data-bind="stats.totalResponses">1,247</span>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-muted-foreground">Collection Size</span>
+                        <span class="text-sm font-medium text-foreground" data-bind="stats.collectionSize">23.4 MB</span>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-muted-foreground">Last Updated</span>
+                        <span class="text-sm font-medium text-foreground" data-bind="stats.lastUpdated">2 min ago</span>
+                    </div>
+                </div>
+
+                <!-- Clear Database Button -->
+                <button class="w-full mt-4 px-3 py-2 text-sm bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors" data-event="click:clearDatabase" data-implementation="Should confirm before clearing database">
+                    <i class="fas fa-trash-alt mr-2"></i>
+                    Clear Database
+                </button>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: ChatArea [Main chat interface and message display] -->
+        <div class="flex-1 flex flex-col">
+            <!-- Chat Header -->
+            <div class="px-6 py-4 bg-card border-b border-border">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-foreground">Knowledge Chat</h2>
+                        <p class="text-sm text-muted-foreground">Ask questions and get AI-powered responses with context</p>
+                    </div>
+                    
+                    <!-- Search Similar Responses Button -->
+                    <button class="px-4 py-2 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors flex items-center gap-2" data-event="click:searchSimilar" data-implementation="Should open vector similarity search interface">
+                        <i class="fas fa-search"></i>
+                        Search Similar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <!-- @COMPONENT: MessageList [Scrollable list of chat messages] -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-4" id="chatMessages">
+                
+                <!-- System Welcome Message -->
+                <div class="flex items-start gap-3 chat-message">
+                    <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                        <i class="fas fa-robot text-primary-foreground text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="bg-card border border-border rounded-lg p-4 shadow-sm">
+                            <p class="text-sm text-foreground">Welcome! I'm your RAG-powered AI assistant. I can answer questions using external knowledge sources and save responses to the vector database for future reference. Ask me anything!</p>
+                        </div>
+                        <p class="text-xs text-muted-foreground mt-1">System • Just now</p>
+                    </div>
+                </div>
+
+                <!-- @MAP: messages.map(message => ( -->
+                <!-- User Message Example -->
+                <div class="flex items-start gap-3 justify-end chat-message">
+                    <div class="flex-1 max-w-2xl">
+                        <div class="bg-primary text-primary-foreground rounded-lg p-4 shadow-sm ml-auto">
+                            <p class="text-sm" data-mock="true">What are the latest developments in quantum computing?</p>
+                        </div>
+                        <p class="text-xs text-muted-foreground mt-1 text-right">You • 2 minutes ago</p>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <i class="fas fa-user text-muted-foreground text-sm"></i>
+                    </div>
+                </div>
+
+                <!-- AI Response with Save Option -->
+                <div class="flex items-start gap-3 chat-message">
+                    <div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                        <i class="fas fa-robot text-accent-foreground text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="bg-card border border-border rounded-lg p-4 shadow-sm">
+                            <p class="text-sm text-foreground mb-3" data-mock="true">
+                                Based on recent research and developments, quantum computing has made significant strides in 2024. Key developments include:
+                                <br><br>
+                                <strong>1. IBM's 1000+ Qubit Processors:</strong> IBM unveiled their roadmap for quantum processors exceeding 1000 qubits, with improved error correction capabilities.
+                                <br><br>
+                                <strong>2. Google's Quantum Error Correction:</strong> Google achieved a breakthrough in quantum error correction using their Sycamore processor, demonstrating logical qubit operations.
+                                <br><br>
+                                <strong>3. Commercial Applications:</strong> Companies like D-Wave and Rigetti are deploying quantum systems for optimization problems in logistics and finance.
+                            </p>
+                            
+                            <!-- Response Actions -->
+                            <div class="flex items-center justify-between pt-3 border-t border-border">
+                                <div class="flex items-center gap-4">
+                                    <!-- Save to Vector DB Toggle -->
+                                    <div class="flex items-center gap-2">
+                                        <input type="checkbox" id="save-response-1" class="w-4 h-4 text-accent bg-input border-border rounded focus:ring-ring focus:ring-2" data-implementation="Toggle to save/not save this specific response">
+                                        <label for="save-response-1" class="text-xs text-muted-foreground cursor-pointer">Save to Vector DB</label>
+                                    </div>
+                                    
+                                    <!-- Source Indicator -->
+                                    <div class="flex items-center gap-1">
+                                        <i class="fas fa-link text-secondary text-xs"></i>
+                                        <span class="text-xs text-muted-foreground" data-bind="response.sourceCount">3 sources</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center gap-2">
+                                    <!-- Copy Response -->
+                                    <button class="p-2 text-muted-foreground hover:text-foreground transition-colors" data-event="click:copyResponse" data-implementation="Copy response to clipboard">
+                                        <i class="fas fa-copy text-xs"></i>
+                                    </button>
+                                    
+                                    <!-- Regenerate Response -->
+                                    <button class="p-2 text-muted-foreground hover:text-foreground transition-colors" data-event="click:regenerateResponse" data-implementation="Regenerate response with same query">
+                                        <i class="fas fa-redo text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-muted-foreground mt-1">AI Assistant • 1 minute ago • Retrieved from MCP sources</p>
+                    </div>
+                </div>
+
+                <!-- Another User Message -->
+                <div class="flex items-start gap-3 justify-end chat-message">
+                    <div class="flex-1 max-w-2xl">
+                        <div class="bg-primary text-primary-foreground rounded-lg p-4 shadow-sm ml-auto">
+                            <p class="text-sm" data-mock="true">Can you explain quantum entanglement in simple terms?</p>
+                        </div>
+                        <p class="text-xs text-muted-foreground mt-1 text-right">You • 30 seconds ago</p>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <i class="fas fa-user text-muted-foreground text-sm"></i>
+                    </div>
+                </div>
+
+                <!-- AI Response Loading State -->
+                <div class="flex items-start gap-3 chat-message">
+                    <div class="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                        <i class="fas fa-robot text-accent-foreground text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="bg-card border border-border rounded-lg p-4 shadow-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="flex gap-1">
+                                    <div class="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div>
+                                    <div class="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" style="animation-delay: 0.2s"></div>
+                                    <div class="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" style="animation-delay: 0.4s"></div>
+                                </div>
+                                <span class="text-xs text-muted-foreground">AI is thinking...</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-muted-foreground mt-1">AI Assistant • Generating response...</p>
+                    </div>
+                </div>
+                <!-- @END_MAP )) -->
+
+            </div>
+
+            <!-- Chat Input -->
+            <!-- @COMPONENT: ChatInput [Input area for new messages] -->
+            <div class="p-6 bg-card border-t border-border">
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <div class="relative">
+                            <textarea 
+                                placeholder="Ask a question about any topic..." 
+                                class="w-full px-4 py-3 pr-12 text-sm bg-input border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px] max-h-32"
+                                rows="1"
+                                data-bind="input.message"
+                                data-implementation="Should auto-resize based on content and handle Enter key for sending"
+                            ></textarea>
+                            
+                            <!-- Character Count -->
+                            <div class="absolute bottom-2 right-2 text-xs text-muted-foreground" data-bind="input.characterCount">
+                                0/2000
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Save Toggle -->
+                        <div class="flex items-center justify-between mt-2">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="quick-save" class="w-4 h-4 text-accent bg-input border-border rounded focus:ring-ring focus:ring-2" checked>
+                                <label for="quick-save" class="text-xs text-muted-foreground cursor-pointer">Save response to vector DB</label>
+                            </div>
+                            
+                            <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                                <i class="fas fa-bolt text-accent"></i>
+                                <span>Press Enter to send</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Send Button -->
+                    <button 
+                        class="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring transition-colors flex items-center gap-2 self-start"
+                        data-event="click:sendMessage"
+                        data-implementation="Should validate input, send to AI, and handle response with vector DB saving logic"
+                    >
+                        <i class="fas fa-paper-plane text-sm"></i>
+                        <span class="hidden sm:inline">Send</span>
+                    </button>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: ChatInput -->
+        </div>
+        <!-- @END_COMPONENT: ChatArea -->
+    </div>
+    <!-- @END_COMPONENT: MainLayout -->
+
+    <!-- @COMPONENT: VectorSearchModal [Modal for searching similar responses] -->
+    <div id="vectorSearchModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" data-implementation="Should be toggled by search similar button">
+        <div class="bg-card rounded-lg shadow-xl max-w-2xl w-full m-4 max-h-[80vh] overflow-hidden">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-border">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-foreground">Search Similar Responses</h3>
+                    <button class="p-2 text-muted-foreground hover:text-foreground transition-colors" data-event="click:closeModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-muted-foreground mt-1">Find similar responses using vector similarity search</p>
+            </div>
+            
+            <!-- Search Input -->
+            <div class="p-6">
+                <div class="relative mb-4">
+                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm"></i>
+                    <input 
+                        type="text" 
+                        placeholder="Enter your query to find similar responses..." 
+                        class="w-full pl-10 pr-4 py-3 text-sm bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                        data-bind="search.query"
+                    >
+                </div>
+                
+                <!-- Similarity Threshold -->
+                <div class="mb-4">
+                    <label class="text-sm text-foreground font-medium block mb-2">Similarity Threshold: <span data-bind="search.threshold">0.7</span></label>
+                    <input type="range" min="0" max="1" step="0.05" value="0.7" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer" data-bind="search.thresholdSlider">
+                </div>
+            </div>
+            
+            <!-- Search Results -->
+            <!-- @COMPONENT: SearchResults [Display vector search results] -->
+            <div class="px-6 pb-6 max-h-96 overflow-y-auto">
+                <h4 class="text-sm font-medium text-foreground mb-3">Similar Responses</h4>
+                
+                <!-- @MAP: searchResults.map(result => ( -->
+                <div class="mb-3 p-4 bg-muted rounded-lg" data-mock="true">
+                    <div class="flex items-start justify-between mb-2">
+                        <span class="text-sm font-medium text-foreground">Similarity: 0.87</span>
+                        <span class="text-xs text-muted-foreground">2 days ago</span>
+                    </div>
+                    <p class="text-sm text-muted-foreground mb-2" data-mock="true">Query: "What is machine learning?"</p>
+                    <p class="text-sm text-foreground" data-mock="true">Machine learning is a subset of artificial intelligence that enables computers to learn and make decisions from data without being explicitly programmed...</p>
+                </div>
+                
+                <div class="mb-3 p-4 bg-muted rounded-lg" data-mock="true">
+                    <div class="flex items-start justify-between mb-2">
+                        <span class="text-sm font-medium text-foreground">Similarity: 0.73</span>
+                        <span class="text-xs text-muted-foreground">1 week ago</span>
+                    </div>
+                    <p class="text-sm text-muted-foreground mb-2" data-mock="true">Query: "Explain neural networks"</p>
+                    <p class="text-sm text-foreground" data-mock="true">Neural networks are computing systems inspired by biological neural networks. They consist of interconnected nodes that process information...</p>
+                </div>
+                <!-- @END_MAP )) -->
+                
+                <!-- No Results State -->
+                <div class="text-center py-8 hidden" id="noResults">
+                    <i class="fas fa-search text-muted-foreground text-2xl mb-2"></i>
+                    <p class="text-sm text-muted-foreground">No similar responses found. Try adjusting your query or lowering the similarity threshold.</p>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: SearchResults -->
+        </div>
+    </div>
+    <!-- @END_COMPONENT: VectorSearchModal -->
+
+    <script>
+        // TODO: Implement business logic, API calls, and state management
+        
+        (function() {
+            // Auto-resize textarea
+            const textarea = document.querySelector('textarea');
+            if (textarea) {
+                textarea.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = Math.min(this.scrollHeight, 128) + 'px';
+                });
+            }
+
+            // Handle Enter key for sending messages
+            if (textarea) {
+                textarea.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        // TODO: Implement message sending logic
+                        console.log('Send message:', this.value);
+                    }
+                });
+            }
+
+            // Character count update
+            if (textarea) {
+                textarea.addEventListener('input', function() {
+                    const count = this.value.length;
+                    const counter = document.querySelector('[data-bind="input.characterCount"]');
+                    if (counter) {
+                        counter.textContent = `${count}/2000`;
+                    }
+                });
+            }
+
+            // Modal toggle functionality
+            const searchButton = document.querySelector('[data-event="click:searchSimilar"]');
+            const modal = document.getElementById('vectorSearchModal');
+            const closeButton = document.querySelector('[data-event="click:closeModal"]');
+
+            if (searchButton && modal) {
+                searchButton.addEventListener('click', function() {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                });
+            }
+
+            if (closeButton && modal) {
+                closeButton.addEventListener('click', function() {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                });
+            }
+
+            // Close modal on backdrop click
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        modal.classList.add('hidden');
+                        modal.classList.remove('flex');
+                    }
+                });
+            }
+
+            // Similarity threshold slider updates
+            const sliders = document.querySelectorAll('input[type="range"]');
+            sliders.forEach(slider => {
+                slider.addEventListener('input', function() {
+                    const value = this.value;
+                    const display = document.querySelector(`[data-bind="${this.dataset.bind}Value"]`) || 
+                                  this.parentNode.querySelector('span[data-bind*="threshold"]');
+                    if (display) {
+                        display.textContent = value;
+                    }
+                });
+            });
+
+            // Simulate real-time status updates
+            function updateConnectionStatus() {
+                const statuses = ['Connected', 'Connecting...', 'Disconnected'];
+                const colors = ['bg-accent', 'bg-yellow-500', 'bg-destructive'];
+                
+                // This is just for demo purposes
+                // TODO: Implement real connection monitoring
+            }
+
+            // Auto-scroll chat to bottom
+            function scrollChatToBottom() {
+                const chatMessages = document.getElementById('chatMessages');
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }
+
+            // Initialize
+            scrollChatToBottom();
+        })();
+    </script>
+</body>
+</html>
