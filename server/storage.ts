@@ -1,5 +1,7 @@
-import { type User, type InsertUser, type ChatMessage, type InsertChatMessage, type VectorResponse, type InsertVectorResponse } from "@shared/schema";
+import { type User, type InsertUser, type ChatMessage, type InsertChatMessage, type VectorResponse, type InsertVectorResponse, users, chatMessages, vectorResponses } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -62,7 +64,7 @@ export class MemStorage implements IStorage {
       id,
       timestamp: new Date(),
       savedToVector: insertMessage.savedToVector ?? false,
-      sources: Array.isArray(insertMessage.sources) ? insertMessage.sources : [],
+      sources: Array.isArray(insertMessage.sources) ? insertMessage.sources as string[] : [],
       similarityScore: insertMessage.similarityScore ?? null,
     };
     this.chatMessages.set(id, message);
@@ -90,7 +92,7 @@ export class MemStorage implements IStorage {
       ...insertVectorResponse,
       id,
       timestamp: new Date(),
-      sources: Array.isArray(insertVectorResponse.sources) ? insertVectorResponse.sources : [],
+      sources: Array.isArray(insertVectorResponse.sources) ? insertVectorResponse.sources as string[] : [],
       messageId: insertVectorResponse.messageId ?? null,
     };
     this.vectorResponses.set(id, vectorResponse);
@@ -102,4 +104,82 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Production-ready database storage with PostgreSQL
+export class DatabaseStorage implements IStorage {
+  // User methods
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  // Chat message methods
+  async getChatMessages(limit: number = 50): Promise<ChatMessage[]> {
+    const messages = await db
+      .select()
+      .from(chatMessages)
+      .orderBy(chatMessages.timestamp)
+      .limit(limit);
+    return messages;
+  }
+
+  async createChatMessage(insertMessage: InsertChatMessage): Promise<ChatMessage> {
+    const [message] = await db
+      .insert(chatMessages)
+      .values({
+        ...insertMessage,
+        sources: insertMessage.sources || []
+      })
+      .returning();
+    return message;
+  }
+
+  async updateChatMessage(id: string, updates: Partial<ChatMessage>): Promise<ChatMessage | undefined> {
+    const [message] = await db
+      .update(chatMessages)
+      .set(updates)
+      .where(eq(chatMessages.id, id))
+      .returning();
+    return message || undefined;
+  }
+
+  // Vector response methods
+  async getVectorResponses(): Promise<VectorResponse[]> {
+    const responses = await db
+      .select()
+      .from(vectorResponses)
+      .orderBy(desc(vectorResponses.timestamp));
+    return responses;
+  }
+
+  async createVectorResponse(insertVectorResponse: InsertVectorResponse): Promise<VectorResponse> {
+    const [vectorResponse] = await db
+      .insert(vectorResponses)
+      .values({
+        ...insertVectorResponse,
+        sources: insertVectorResponse.sources || [],
+        embedding: insertVectorResponse.embedding as number[]
+      })
+      .returning();
+    return vectorResponse;
+  }
+
+  async deleteAllVectorResponses(): Promise<void> {
+    await db.delete(vectorResponses);
+  }
+}
+
+// Use production database storage
+export const storage = new DatabaseStorage();
