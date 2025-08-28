@@ -1,16 +1,18 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
 import { generateChatResponse, generateEmbedding, checkOpenAIConnection } from "./services/openai";
-import { milvusService } from "./services/milvus";
+import { qdrantService, type ChatMessage } from "./services/qdrant";
 import { evaluateMemoryValue } from "./services/memory-evaluator";
-import { insertChatMessageSchema } from "@shared/schema";
+import { randomUUID } from 'crypto';
+
+// In-memory chat storage for the session
+let chatMessages: ChatMessage[] = [];
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
   // Initialize services
   try {
-    await milvusService.connect();
+    await qdrantService.connect();
   } catch (error) {
     console.error("Service initialization error:", error);
   }
@@ -18,8 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get chat messages
   app.get("/api/messages", async (req, res) => {
     try {
-      const messages = await storage.getChatMessages();
-      res.json(messages);
+      res.json(chatMessages);
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ message: "Failed to fetch messages" });
@@ -36,16 +37,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Save user message
-      const userMessage = await storage.createChatMessage({
+      const userMessage: ChatMessage = {
+        id: randomUUID(),
         content,
         role: "user",
-        savedToVector: false,
+        timestamp: new Date(),
         sources: [],
-        similarityScore: null,
-      });
+      };
+      chatMessages.push(userMessage);
 
-      // Generate AI response
-      const aiResponse = await generateChatResponse(content);
+      // Search vector database first for context
+      let vectorContext = "";
+      let similarResults = [];
+      try {
+        const queryEmbedding = await generateEmbedding(content);
+        similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 5);
+        
+        if (similarResults.length > 0) {
+          vectorContext = similarResults.map(result => 
+            `Previous Q: ${result.query}\nPrevious A: ${result.response}`
+          ).join('\n\n---\n\n');
+        }
+      } catch (error) {
+        console.error("Error searching vector database:", error);
+      }
+
+      // Generate AI response with vector context
+      const aiResponse = await generateChatResponse(content, vectorContext);
 
       // Evaluate memory value using intelligent system
       const memoryDecision = await evaluateMemoryValue(
@@ -63,39 +81,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (memoryDecision.action === "skip") {
           shouldSaveToVector = false;
         }
-        // For "prompt_user", we'll return the suggestion to the frontend
       } else {
         // User made an explicit decision
         shouldSaveToVector = userDecision;
       }
 
       // Save AI response
-      const assistantMessage = await storage.createChatMessage({
+      const assistantMessage: ChatMessage = {
+        id: randomUUID(),
         content: aiResponse.content,
         role: "assistant",
-        savedToVector: shouldSaveToVector,
+        timestamp: new Date(),
         sources: aiResponse.sources,
-        similarityScore: null,
-      });
+      };
+      chatMessages.push(assistantMessage);
 
       // Save to vector database if determined
       if (shouldSaveToVector) {
         try {
-          const vectorResponse = await storage.createVectorResponse({
-            messageId: assistantMessage.id,
+          await qdrantService.insertVector({
+            id: randomUUID(),
             query: content,
             response: aiResponse.content,
             embedding: aiResponse.embedding,
             sources: aiResponse.sources,
-          });
-
-          await milvusService.insertVector({
-            id: vectorResponse.id!,
-            query: content,
-            response: aiResponse.content,
-            embedding: aiResponse.embedding,
-            sources: aiResponse.sources,
-            timestamp: vectorResponse.timestamp!.toISOString(),
+            timestamp: new Date().toISOString(),
           });
         } catch (error) {
           console.error("Error saving to vector database:", error);
@@ -120,38 +130,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { saveToVector } = req.body;
 
-      const message = await storage.updateChatMessage(id, {
-        savedToVector: saveToVector,
-      });
-
+      const message = chatMessages.find(m => m.id === id);
       if (!message) {
         return res.status(404).json({ message: "Message not found" });
       }
 
       if (saveToVector && message.role === "assistant") {
         // Find the corresponding user message for the query
-        const messages = await storage.getChatMessages();
-        const messageIndex = messages.findIndex(m => m.id === id);
-        const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
+        const messageIndex = chatMessages.findIndex(m => m.id === id);
+        const userMessage = messageIndex > 0 ? chatMessages[messageIndex - 1] : null;
 
         if (userMessage && userMessage.role === "user") {
           const embedding = await generateEmbedding(message.content);
           
-          const vectorResponse = await storage.createVectorResponse({
-            messageId: message.id,
+          await qdrantService.insertVector({
+            id: randomUUID(),
             query: userMessage.content,
             response: message.content,
             embedding,
             sources: message.sources || [],
-          });
-
-          await milvusService.insertVector({
-            id: vectorResponse.id!,
-            query: userMessage.content,
-            response: message.content,
-            embedding,
-            sources: message.sources || [],
-            timestamp: vectorResponse.timestamp!.toISOString(),
+            timestamp: new Date().toISOString(),
           });
         }
       }
@@ -173,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const queryEmbedding = await generateEmbedding(query);
-      const results = await milvusService.searchSimilar(queryEmbedding, threshold, limit);
+      const results = await qdrantService.searchSimilar(queryEmbedding, threshold, limit);
 
       res.json(results);
     } catch (error) {
@@ -190,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ]);
 
       const status = {
-        milvus: milvusService.getConnectionStatus(),
+        qdrant: qdrantService.getConnectionStatus(),
         openai: openaiStatus.status === "fulfilled" ? openaiStatus.value : false,
       };
 
@@ -204,8 +202,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get database statistics
   app.get("/api/stats", async (req, res) => {
     try {
-      const stats = await milvusService.getCollectionStats();
-      const lastMessage = (await storage.getChatMessages(1))[0];
+      const stats = await qdrantService.getCollectionStats();
+      const lastMessage = chatMessages[chatMessages.length - 1];
       
       res.json({
         ...stats,
@@ -221,8 +219,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clear database
   app.delete("/api/clear-database", async (req, res) => {
     try {
-      await milvusService.clearCollection();
-      await storage.deleteAllVectorResponses();
+      await qdrantService.clearCollection();
+      chatMessages = []; // Clear in-memory chat messages
       
       res.json({ message: "Database cleared successfully" });
     } catch (error) {

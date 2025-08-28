@@ -1,6 +1,6 @@
 interface SidebarProps {
   connectionStatus?: {
-    milvus: boolean;
+    qdrant: boolean;
     openai: boolean;
   };
   dbStats?: {
@@ -71,13 +71,15 @@ export function Sidebar({
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
-                <i className="fas fa-database text-accent text-xs"></i>
+                <i className="fas fa-vector-square text-accent text-xs"></i>
               </div>
               <span className="text-sm text-foreground font-medium">Vector Storage</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-accent status-indicator"></div>
-              <span className="text-xs font-medium text-accent">Active</span>
+              <div className={`w-2 h-2 rounded-full ${connectionStatus?.qdrant ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
+              <span className={`text-xs font-medium ${connectionStatus?.qdrant ? 'text-accent' : 'text-destructive'}`}>
+                {connectionStatus?.qdrant ? 'Connected' : 'Disconnected'}
+              </span>
             </div>
           </div>
 

@@ -8,7 +8,14 @@ import { MemorySuggestion } from "@/components/chat/memory-suggestion";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ChatMessage } from "@shared/schema";
+// Define ChatMessage interface locally since we removed shared schema
+interface ChatMessage {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  timestamp: Date;
+  sources?: string[];
+}
 
 interface MemoryDecision {
   action: "auto_save" | "prompt_user" | "skip";
@@ -44,7 +51,7 @@ export default function Chat() {
 
   // Fetch connection status
   const { data: connectionStatus } = useQuery<{
-    milvus: boolean;
+    qdrant: boolean;
     openai: boolean;
   }>({
     queryKey: ["/api/status"],
@@ -227,9 +234,11 @@ export default function Chat() {
               
               {/* Connection status indicator */}
               <div className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${connectionStatus?.openai ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus?.openai && connectionStatus?.qdrant ? 'bg-green-500' : 'bg-red-500'
+                } status-indicator`}></div>
                 <span className="text-xs text-muted-foreground hidden sm:inline">
-                  {connectionStatus?.openai ? 'Online' : 'Offline'}
+                  {connectionStatus?.openai && connectionStatus?.qdrant ? 'RAG Ready' : 'Connecting...'}
                 </span>
               </div>
             </div>
