@@ -1,8 +1,7 @@
 import { MilvusClient } from "@zilliz/milvus2-sdk-node";
 import type { VectorResponse } from "@shared/schema";
-import { db } from "../db";
-import { vectorResponses } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { storage } from '../storage';
+import { randomUUID } from 'crypto';
 
 const COLLECTION_NAME = "chat_responses";
 const VECTOR_DIM = 1536; // OpenAI embedding dimension
@@ -27,25 +26,6 @@ class MilvusService {
         username: process.env.MILVUS_USERNAME || "",
         password: process.env.MILVUS_PASSWORD || "",
       });
-    }
-    // Load existing vectors from database on startup
-    this.loadVectorsFromDatabase();
-  }
-
-  private async loadVectorsFromDatabase(): Promise<void> {
-    try {
-      const dbVectors = await db.select().from(vectorResponses);
-      this.inMemoryVectors = dbVectors.map(vector => ({
-        id: vector.id,
-        query: vector.query,
-        response: vector.response,
-        embedding: vector.embedding,
-        sources: vector.sources || [],
-        timestamp: vector.timestamp?.toISOString() || new Date().toISOString(),
-      }));
-      console.log(`Loaded ${this.inMemoryVectors.length} vectors from database`);
-    } catch (error) {
-      console.error("Failed to load vectors from database:", error);
     }
   }
 
@@ -169,8 +149,7 @@ class MilvusService {
         this.inMemoryVectors.push(vectorResponse);
       }
     } else {
-      // Store in database and in-memory for fast retrieval
-      await this.storeVectorToDatabase(vectorResponse);
+      // Use in-memory storage
       this.inMemoryVectors.push(vectorResponse);
     }
   }
@@ -260,36 +239,8 @@ class MilvusService {
       }
     }
     
-    // Clear database and in-memory storage
-    try {
-      await db.delete(vectorResponses);
-    } catch (error) {
-      console.error("Failed to clear vectors from database:", error);
-    }
+    // Clear in-memory storage
     this.inMemoryVectors = [];
-  }
-
-  private async storeVectorToDatabase(vectorResponse: {
-    id: string;
-    query: string;
-    response: string;
-    embedding: number[];
-    sources: string[];
-    timestamp: string;
-  }): Promise<void> {
-    try {
-      await db.insert(vectorResponses).values({
-        id: vectorResponse.id,
-        query: vectorResponse.query,
-        response: vectorResponse.response,
-        embedding: vectorResponse.embedding,
-        sources: vectorResponse.sources,
-        timestamp: new Date(vectorResponse.timestamp),
-      });
-    } catch (error) {
-      console.error("Failed to store vector to database:", error);
-      throw error;
-    }
   }
 
   getConnectionStatus(): boolean {

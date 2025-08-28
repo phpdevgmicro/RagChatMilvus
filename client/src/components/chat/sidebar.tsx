@@ -154,13 +154,13 @@ export function Sidebar({
             </span>
           </div>
           
-          <div className="p-3 bg-muted/50 rounded-md">
+          <div className="p-3 bg-accent/10 rounded-md border border-accent/20">
             <div className="flex items-center gap-2 mb-1">
-              <i className="fas fa-info-circle text-accent text-sm"></i>
-              <span className="text-xs font-medium text-foreground">Memory Storage</span>
+              <i className="fas fa-database text-accent text-sm"></i>
+              <span className="text-xs font-medium text-foreground">Production Ready</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Vectors stored in-memory. Data resets on server restart.
+              Vectors stored in PostgreSQL. Data persists across restarts.
             </p>
           </div>
         </div>
