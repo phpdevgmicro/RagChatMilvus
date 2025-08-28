@@ -13,26 +13,31 @@ export interface ChatResponse {
 
 export async function generateChatResponse(
   query: string, 
-  context: string = ""
+  context: string = "",
+  options: { temperature?: number; model?: string; maxTokens?: number } = {}
 ): Promise<ChatResponse> {
   try {
+    const { temperature = 0.7, model = "gpt-4o-mini", maxTokens = 1000 } = options;
+    
     const prompt = context 
       ? `Context: ${context}\n\nUser Question: ${query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.`
       : `User Question: ${query}\n\nPlease provide a comprehensive and helpful answer.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model,
       messages: [
         {
           role: "system",
-          content: "You are a helpful AI assistant that provides detailed, accurate responses. When context is provided, use it to enhance your answers while maintaining accuracy."
+          content: "You are a helpful AI assistant. Provide clear, concise, and accurate responses. When context is provided, use it to enhance your answers."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 1000,
+      max_tokens: maxTokens,
+      temperature,
+      stream: false, // Ensure we're not using streaming
     });
 
     const content = response.choices[0].message.content || "";

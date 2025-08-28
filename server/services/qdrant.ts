@@ -7,6 +7,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   timestamp: Date;
   sources?: string[];
+  savedToVector?: boolean;
 }
 
 export interface VectorResponse {

@@ -1,15 +1,17 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { generateChatResponse, generateEmbedding, checkOpenAIConnection } from "./services/openai";
+import {
+  generateChatResponse,
+  generateEmbedding,
+  checkOpenAIConnection,
+} from "./services/openai";
 import { qdrantService, type ChatMessage } from "./services/qdrant";
-import { evaluateMemoryValue } from "./services/memory-evaluator";
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 // In-memory chat storage for the session
 let chatMessages: ChatMessage[] = [];
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
   // Initialize services
   try {
     await qdrantService.connect();
@@ -30,7 +32,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send chat message and get AI response
   app.post("/api/messages", async (req, res) => {
     try {
-      const { content, saveToVector = false, userDecision = null } = req.body;
+      const {
+        content,
+        saveToVector = false,
+        temperature = 0.5,
+        model = "gpt-4o-mini",
+        maxTokens = 2048,
+      } = req.body;
 
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
@@ -46,45 +54,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       chatMessages.push(userMessage);
 
-      // Search vector database first for context
-      let vectorContext = "";
-      let similarResults = [];
-      try {
-        const queryEmbedding = await generateEmbedding(content);
-        similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 5);
-        
-        if (similarResults.length > 0) {
-          vectorContext = similarResults.map(result => 
-            `Previous Q: ${result.query}\nPrevious A: ${result.response}`
-          ).join('\n\n---\n\n');
+      // Generate AI response first for faster user experience
+      const aiResponsePromise = generateChatResponse(content, "", {
+        temperature,
+        model,
+        maxTokens,
+      });
+
+      // Search vector database in parallel for potential context (for future responses)
+      const vectorSearchPromise = (async () => {
+        try {
+          const queryEmbedding = await generateEmbedding(content);
+          return await qdrantService.searchSimilar(queryEmbedding, 0.7, 3); // Reduced from 5 to 3 for speed
+        } catch (error) {
+          console.error("Error searching vector database:", error);
+          return [];
         }
-      } catch (error) {
-        console.error("Error searching vector database:", error);
-      }
+      })();
 
-      // Generate AI response with vector context
-      const aiResponse = await generateChatResponse(content, vectorContext);
+      // Wait for AI response (priority)
+      const aiResponse = await aiResponsePromise;
 
-      // Evaluate memory value using intelligent system
-      const memoryDecision = await evaluateMemoryValue(
-        content, 
-        aiResponse.content, 
-        ""
-      );
+      // Get vector results (optional for context)
+      const similarResults = await vectorSearchPromise;
 
-      let shouldSaveToVector = saveToVector;
-      
-      // Apply intelligent memory decision
-      if (userDecision === null) {
-        if (memoryDecision.action === "auto_save") {
-          shouldSaveToVector = true;
-        } else if (memoryDecision.action === "skip") {
-          shouldSaveToVector = false;
-        }
-      } else {
-        // User made an explicit decision
-        shouldSaveToVector = userDecision;
-      }
+      // Use the saveToVector flag directly from user input
+      const shouldSaveToVector = saveToVector;
 
       // Save AI response
       const assistantMessage: ChatMessage = {
@@ -93,30 +88,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "assistant",
         timestamp: new Date(),
         sources: aiResponse.sources,
+        savedToVector: shouldSaveToVector,
       };
       chatMessages.push(assistantMessage);
 
-      // Save to vector database if determined
+      // Save to vector database asynchronously (don't block response)
       if (shouldSaveToVector) {
-        try {
-          await qdrantService.insertVector({
+        // Fire and forget - don't await this
+        qdrantService
+          .insertVector({
             id: randomUUID(),
             query: content,
             response: aiResponse.content,
             embedding: aiResponse.embedding,
             sources: aiResponse.sources,
             timestamp: new Date().toISOString(),
+          })
+          .catch((error) => {
+            console.error("Error saving to vector database:", error);
           });
-        } catch (error) {
-          console.error("Error saving to vector database:", error);
-        }
       }
 
       res.json({
         userMessage,
         assistantMessage,
         sources: aiResponse.sources,
-        memoryDecision: userDecision === null ? memoryDecision : null,
       });
     } catch (error) {
       console.error("Error processing message:", error);
@@ -130,27 +126,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { saveToVector } = req.body;
 
-      const message = chatMessages.find(m => m.id === id);
+      const message = chatMessages.find((m) => m.id === id);
       if (!message) {
         return res.status(404).json({ message: "Message not found" });
       }
 
-      if (saveToVector && message.role === "assistant") {
-        // Find the corresponding user message for the query
-        const messageIndex = chatMessages.findIndex(m => m.id === id);
-        const userMessage = messageIndex > 0 ? chatMessages[messageIndex - 1] : null;
+      // Update the saved status
+      if (message.role === "assistant") {
+        message.savedToVector = saveToVector;
 
-        if (userMessage && userMessage.role === "user") {
-          const embedding = await generateEmbedding(message.content);
-          
-          await qdrantService.insertVector({
-            id: randomUUID(),
-            query: userMessage.content,
-            response: message.content,
-            embedding,
-            sources: message.sources || [],
-            timestamp: new Date().toISOString(),
-          });
+        if (saveToVector) {
+          // Find the corresponding user message for the query
+          const messageIndex = chatMessages.findIndex((m) => m.id === id);
+          const userMessage =
+            messageIndex > 0 ? chatMessages[messageIndex - 1] : null;
+
+          if (userMessage && userMessage.role === "user") {
+            const embedding = await generateEmbedding(message.content);
+
+            await qdrantService.insertVector({
+              id: randomUUID(),
+              query: userMessage.content,
+              response: message.content,
+              embedding,
+              sources: message.sources || [],
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
       }
 
@@ -171,7 +173,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const queryEmbedding = await generateEmbedding(query);
-      const results = await qdrantService.searchSimilar(queryEmbedding, threshold, limit);
+      const results = await qdrantService.searchSimilar(
+        queryEmbedding,
+        threshold,
+        limit,
+      );
 
       res.json(results);
     } catch (error) {
@@ -189,7 +195,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const status = {
         qdrant: qdrantService.getConnectionStatus(),
-        openai: openaiStatus.status === "fulfilled" ? openaiStatus.value : false,
+        openai:
+          openaiStatus.status === "fulfilled" ? openaiStatus.value : false,
       };
 
       res.json(status);
@@ -204,11 +211,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const stats = await qdrantService.getCollectionStats();
       const lastMessage = chatMessages[chatMessages.length - 1];
-      
+
       res.json({
         ...stats,
-        lastUpdated: lastMessage?.timestamp ? 
-          getTimeAgo(lastMessage.timestamp) : "Never",
+        lastUpdated: lastMessage?.timestamp
+          ? getTimeAgo(lastMessage.timestamp)
+          : "Never",
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -221,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await qdrantService.clearCollection();
       chatMessages = []; // Clear in-memory chat messages
-      
+
       res.json({ message: "Database cleared successfully" });
     } catch (error) {
       console.error("Error clearing database:", error);
@@ -237,13 +245,13 @@ function getTimeAgo(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  
+
   if (diffMins < 1) return "Just now";
   if (diffMins < 60) return `${diffMins} min ago`;
-  
+
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 }
