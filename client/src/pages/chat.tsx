@@ -41,8 +41,6 @@ export default function Chat() {
   
   // Prompt settings state
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [userPromptTemplate, setUserPromptTemplate] = useState("");
-  const [userPromptNoContext, setUserPromptNoContext] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,11 +59,9 @@ export default function Chat() {
     refetchInterval: 30000,
   });
 
-  // Fetch all settings (prompts + model configuration)
+  // Fetch all settings (system prompt + model configuration)
   const { data: allSettings } = useQuery<{
     systemPrompt: string;
-    userPromptTemplate: string;
-    userPromptNoContext: string;
     model: string;
     temperature: number;
     maxTokens: number;
@@ -77,8 +73,6 @@ export default function Chat() {
   useEffect(() => {
     if (allSettings) {
       setSystemPrompt(allSettings.systemPrompt);
-      setUserPromptTemplate(allSettings.userPromptTemplate);
-      setUserPromptNoContext(allSettings.userPromptNoContext);
       setModel(allSettings.model);
       setTemperature(allSettings.temperature);
       setMaxTokens(allSettings.maxTokens);
@@ -108,16 +102,9 @@ export default function Chat() {
       // Scroll to bottom immediately when starting to type
       setTimeout(scrollToBottom, 50);
 
-      // Only send message if settings are loaded from database
-      if (!model || temperature === undefined || maxTokens === undefined) {
-        throw new Error("Settings not loaded from database. Please wait for configuration to load.");
-      }
-      
+      // Backend will use database settings directly - no need to send them
       const response = await apiRequest("POST", "/api/messages", {
         content,
-        temperature,
-        model,
-        maxTokens,
         saveToVector: saveToVector,
       });
       return response.json() as Promise<ChatResponse>;
@@ -191,12 +178,10 @@ export default function Chat() {
     },
   });
 
-  // Update prompt settings mutation
+  // Update settings mutation
   const updatePromptsMutation = useMutation({
     mutationFn: async (settings: {
       systemPrompt: string;
-      userPromptTemplate: string;
-      userPromptNoContext: string;
       model: string;
       temperature: number;
       maxTokens: number;
@@ -277,7 +262,7 @@ export default function Chat() {
   };
 
   const handleUpdatePrompts = () => {
-    // Only update if all settings are loaded from database
+    // Only update if settings are loaded from database
     if (!model || temperature === undefined || maxTokens === undefined) {
       toast({
         title: "⚠️ Settings Not Loaded",
@@ -290,8 +275,6 @@ export default function Chat() {
     
     updatePromptsMutation.mutate({
       systemPrompt,
-      userPromptTemplate,
-      userPromptNoContext,
       model,
       temperature,
       maxTokens,
@@ -432,7 +415,7 @@ export default function Chat() {
 
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Prompt Settings</CardTitle>
+                        <CardTitle className="text-sm font-medium">System Prompt</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -442,32 +425,8 @@ export default function Chat() {
                             placeholder="You are a helpful AI assistant..."
                             value={systemPrompt}
                             onChange={(e) => setSystemPrompt(e.target.value)}
-                            className="min-h-[60px] resize-none"
+                            className="min-h-[100px] resize-none"
                             data-testid="textarea-system-prompt"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="user-prompt-template" className="text-sm">User Prompt (with context)</Label>
-                          <Textarea
-                            id="user-prompt-template"
-                            placeholder="Context: {context}&#10;&#10;User Question: {query}&#10;&#10;Please provide a comprehensive answer."
-                            value={userPromptTemplate}
-                            onChange={(e) => setUserPromptTemplate(e.target.value)}
-                            className="min-h-[80px] resize-none"
-                            data-testid="textarea-user-prompt-template"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="user-prompt-no-context" className="text-sm">User Prompt (no context)</Label>
-                          <Textarea
-                            id="user-prompt-no-context"
-                            placeholder="User Question: {query}&#10;&#10;Please provide a helpful answer."
-                            value={userPromptNoContext}
-                            onChange={(e) => setUserPromptNoContext(e.target.value)}
-                            className="min-h-[60px] resize-none"
-                            data-testid="textarea-user-prompt-no-context"
                           />
                         </div>
 

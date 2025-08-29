@@ -1,5 +1,7 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { randomUUID } from 'crypto';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export interface ChatMessage {
   id: string;

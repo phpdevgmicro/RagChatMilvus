@@ -8,3 +8,5 @@
 [x] 8. Fix delete conversation bug - clear button now properly calls server API
 [x] 9. Connect user's Supabase PostgreSQL database with proper SSL configuration
 [x] 10. Migration completed successfully - all functionality verified working
+[x] 11. Simplified GPT model implementation - removed complex prompt templates, now uses simple semantic search with system prompt only
+[x] 12. Cleaned database and codebase - removed user prompt templates, keeping only system prompt for simple configuration

@@ -2,6 +2,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { settings } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Handle Supabase connection string and SSL configuration
 let connectionString = process.env.DATABASE_URL;
@@ -14,7 +16,9 @@ if (isSupabase && connectionString) {
 
 const pool = new Pool({
   connectionString,
-  ssl: isSupabase ? false : undefined
+  ssl: isSupabase
+    ? { rejectUnauthorized: false } // ✅ enable SSL for Supabase
+    : undefined,
 });
 
 // Initialize Drizzle ORM
@@ -33,8 +37,6 @@ export async function initializeDatabase() {
       
       const minimalDefaults = [
         { key: 'systemPrompt', value: 'You are a helpful AI assistant.' },
-        { key: 'userPromptTemplate', value: 'Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.' },
-        { key: 'userPromptNoContext', value: 'User Question: {query}\n\nPlease provide a comprehensive and helpful answer.' },
         { key: 'model', value: 'gpt-4o-mini' },
         { key: 'temperature', value: '1.0' },
         { key: 'maxTokens', value: '2048' }

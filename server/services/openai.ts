@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import dotenv from 'dotenv';
+dotenv.config();
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
@@ -16,7 +18,7 @@ export interface ChatResponse {
 
 export async function generateChatResponse(
   query: string, 
-  context: string = "",
+  previousAssistantResponses: Array<{query: string, response: string}> = [],
   options: { temperature?: number; model?: string; maxTokens?: number } = {},
   settings?: Record<string, string>
 ): Promise<ChatResponse> {
@@ -34,43 +36,36 @@ export async function generateChatResponse(
       throw new Error("MaxTokens parameter is required");
     }
     
-    // Use settings from database - no fallbacks
+    // Only need system prompt from database
     if (!settings?.systemPrompt) {
       throw new Error("System prompt not configured in database");
     }
-    if (!settings?.userPromptTemplate) {
-      throw new Error("User prompt template not configured in database");
-    }
-    if (!settings?.userPromptNoContext) {
-      throw new Error("User prompt (no context) not configured in database");
-    }
     
-    const currentSystemPrompt = settings.systemPrompt;
-    const currentUserPromptTemplate = settings.userPromptTemplate;
-    const currentUserPromptNoContext = settings.userPromptNoContext;
-    
-    // Build messages array with context as assistant memory
+    // Build simple messages array
     const messages: ChatCompletionMessageParam[] = [];
     
-    // Enhanced system prompt that includes conversation memory
-    let systemPromptWithMemory = currentSystemPrompt;
-    if (context) {
-      systemPromptWithMemory += `\n\nIMPORTANT: You have access to relevant memories from previous conversations. Use this context naturally as if you remember these past interactions:\n\n${context}\n\nUse this memory to provide more contextual and personalized responses. Reference previous conversations when relevant.`;
-    }
-    
+    // System prompt from database
     messages.push({
       role: "system",
-      content: systemPromptWithMemory
+      content: settings.systemPrompt
     });
     
-    // Simple user query without context manipulation
-    const userPrompt = context 
-      ? currentUserPromptTemplate.replace('{context}', '').replace('{query}', query).trim()
-      : currentUserPromptNoContext.replace('{query}', query);
+    // Add previous relevant conversations as context
+    for (const prev of previousAssistantResponses) {
+      messages.push({
+        role: "user",
+        content: prev.query
+      });
+      messages.push({
+        role: "assistant", 
+        content: prev.response
+      });
+    }
     
+    // Current user message - simple and direct
     messages.push({
       role: "user", 
-      content: userPrompt
+      content: query
     });
 
     const response = await openai.chat.completions.create({
@@ -91,7 +86,7 @@ export async function generateChatResponse(
 
     return {
       content,
-      sources: context ? ["External Knowledge Base"] : [],
+      sources: previousAssistantResponses.length > 0 ? ["Previous Conversations"] : [],
       embedding: embeddingResponse.data[0].embedding,
     };
   } catch (error) {

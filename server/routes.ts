@@ -36,9 +36,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         content,
         saveToVector = false,
-        temperature,
-        model,
-        maxTokens,
       } = req.body;
 
       if (!content || typeof content !== "string") {
@@ -55,42 +52,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       chatMessages.push(userMessage);
 
-      // First, search vector database for context
-      let contextFromPreviousChats = "";
+      // Search vector database for previous similar conversations
+      let previousConversations: Array<{query: string, response: string}> = [];
       try {
         const queryEmbedding = await generateEmbedding(content);
         const similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 3);
         
         if (similarResults.length > 0) {
-          contextFromPreviousChats = similarResults.map((result, index) => 
-            `Memory ${index + 1} (relevance: ${(result.similarity * 100).toFixed(1)}%):\nUser previously asked: "${result.query}"\nYou responded: "${result.response}"\n`
-          ).join("\n");
+          previousConversations = similarResults.map(result => ({
+            query: result.query,
+            response: result.response
+          }));
         }
       } catch (error) {
         console.error("Error searching vector database:", error);
       }
 
-      // Get settings from database
+      // Get fresh settings from database every time
       const settings = await getAllSettings();
       
-      // Use database settings or request parameters - no hardcoded defaults
-      const currentModel = model || settings.model;
-      const currentTemperature = temperature !== undefined ? temperature : parseFloat(settings.temperature);
-      const currentMaxTokens = maxTokens || parseInt(settings.maxTokens);
+      // ALWAYS use database settings only - never use request parameters
+      const currentModel = settings.model;
+      const currentTemperature = parseFloat(settings.temperature);
+      const currentMaxTokens = parseInt(settings.maxTokens);
       
       // Validate required settings exist
-      if (!currentModel || !settings.model) {
+      if (!currentModel) {
         return res.status(400).json({ message: "Model not configured. Please set model in settings." });
       }
-      if (isNaN(currentTemperature) || !settings.temperature) {
+      if (isNaN(currentTemperature)) {
         return res.status(400).json({ message: "Temperature not configured. Please set temperature in settings." });
       }
-      if (!currentMaxTokens || !settings.maxTokens) {
+      if (!currentMaxTokens) {
         return res.status(400).json({ message: "Max tokens not configured. Please set maxTokens in settings." });
       }
+      if (!settings.systemPrompt) {
+        return res.status(400).json({ message: "System prompt not configured. Please set system prompt in settings." });
+      }
 
-      // Generate AI response with context from semantic search
-      const aiResponse = await generateChatResponse(content, contextFromPreviousChats, {
+      // Generate AI response with previous conversations as context
+      const aiResponse = await generateChatResponse(content, previousConversations, {
         temperature: currentTemperature,
         model: currentModel,
         maxTokens: currentMaxTokens,
@@ -280,53 +281,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get prompt settings
+  // Get system prompt
   app.get("/api/prompts", async (req, res) => {
     try {
       const settings = await getAllSettings();
       res.json({
-        systemPrompt: settings.systemPrompt || "You are a helpful AI assistant.",
-        userPromptTemplate: settings.userPromptTemplate || "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.",
-        userPromptNoContext: settings.userPromptNoContext || "User Question: {query}\n\nPlease provide a comprehensive and helpful answer."
+        systemPrompt: settings.systemPrompt || "You are a helpful AI assistant."
       });
     } catch (error) {
-      console.error("Error fetching prompt settings:", error);
-      res.status(500).json({ message: "Failed to fetch prompt settings" });
+      console.error("Error fetching system prompt:", error);
+      res.status(500).json({ message: "Failed to fetch system prompt" });
     }
   });
 
-  // Update prompt settings
+  // Update system prompt
   app.put("/api/prompts", async (req, res) => {
     try {
-      const { systemPrompt, userPromptTemplate, userPromptNoContext } = req.body;
+      const { systemPrompt } = req.body;
       
       if (systemPrompt) await setSetting('systemPrompt', systemPrompt);
-      if (userPromptTemplate) await setSetting('userPromptTemplate', userPromptTemplate);
-      if (userPromptNoContext) await setSetting('userPromptNoContext', userPromptNoContext);
 
-      res.json({ message: "Prompts updated successfully" });
+      res.json({ message: "System prompt updated successfully" });
     } catch (error) {
-      console.error("Error updating prompt settings:", error);
-      res.status(500).json({ message: "Failed to update prompt settings" });
+      console.error("Error updating system prompt:", error);
+      res.status(500).json({ message: "Failed to update system prompt" });
     }
   });
 
-  // Update all settings (model configuration + prompts)
+  // Update all settings (model configuration + system prompt)
   app.put("/api/settings", async (req, res) => {
     try {
       const { 
         systemPrompt, 
-        userPromptTemplate, 
-        userPromptNoContext,
         model,
         temperature,
         maxTokens 
       } = req.body;
       
-      // Update prompt settings
+      // Update system prompt
       if (systemPrompt) await setSetting('systemPrompt', systemPrompt);
-      if (userPromptTemplate) await setSetting('userPromptTemplate', userPromptTemplate);
-      if (userPromptNoContext) await setSetting('userPromptNoContext', userPromptNoContext);
       
       // Update model settings
       if (model) await setSetting('model', model);
@@ -346,15 +339,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = await getAllSettings();
       res.json({
         systemPrompt: settings.systemPrompt || "You are a helpful AI assistant.",
-        userPromptTemplate: settings.userPromptTemplate || "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.",
-        userPromptNoContext: settings.userPromptNoContext || "User Question: {query}\n\nPlease provide a comprehensive and helpful answer.",
         model: settings.model || "gpt-4o-mini",
         temperature: parseFloat(settings.temperature || "1.0"),
         maxTokens: parseInt(settings.maxTokens || "2048")
       });
     } catch (error) {
       console.error("Error fetching settings:", error);
-      res.status(500).json({ message: "Failed to fetch settings" });
+      res.status(500).json({ message: "Failed to update settings" });
     }
   });
 
