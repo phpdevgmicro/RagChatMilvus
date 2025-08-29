@@ -357,26 +357,62 @@ export default function Chat() {
 
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Model Configuration</CardTitle>
+                        <CardTitle className="text-sm font-medium">System Prompt</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="model-select" className="text-sm">Model</Label>
-                          <Select value={model} onValueChange={setModel}>
-                            <SelectTrigger id="model-select" data-testid="select-model">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="gpt-5">GPT-5</SelectItem>
-                              <SelectItem value="gpt-5-mini">GPT-5 Mini</SelectItem>
-                              <SelectItem value="gpt-5-nano">GPT-5 Nano</SelectItem>
-                              <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
-                              <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                              <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                              <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                              <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Label htmlFor="system-prompt" className="text-sm">System Prompt</Label>
+                          <Textarea
+                            id="system-prompt"
+                            placeholder="You are a helpful AI assistant..."
+                            value={systemPrompt}
+                            onChange={(e) => setSystemPrompt(e.target.value)}
+                            className="min-h-[100px] resize-none"
+                            data-testid="textarea-system-prompt"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Model Configuration</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="model-select" className="text-sm">Model</Label>
+                            <Select value={model} onValueChange={setModel}>
+                              <SelectTrigger id="model-select" data-testid="select-model">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="gpt-5">GPT-5</SelectItem>
+                                <SelectItem value="gpt-5-mini">GPT-5 Mini</SelectItem>
+                                <SelectItem value="gpt-5-nano">GPT-5 Nano</SelectItem>
+                                <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                                <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                                <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                                <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                                <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="max-tokens-select" className="text-sm">Max Tokens</Label>
+                            <Select value={maxTokens?.toString() || ""} onValueChange={(value) => setMaxTokens(Number(value))}>
+                              <SelectTrigger id="max-tokens-select" data-testid="select-max-tokens">
+                                <SelectValue placeholder="Select max tokens" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1024">1,024 tokens</SelectItem>
+                                <SelectItem value="2048">2,048 tokens</SelectItem>
+                                <SelectItem value="4096">4,096 tokens</SelectItem>
+                                <SelectItem value="8192">8,192 tokens</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -393,40 +429,6 @@ export default function Chat() {
                             onValueChange={(value) => setTemperature(value[0])}
                             className="w-full"
                             data-testid="slider-temperature"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="max-tokens-select" className="text-sm">Max Tokens</Label>
-                          <Select value={maxTokens?.toString() || ""} onValueChange={(value) => setMaxTokens(Number(value))}>
-                            <SelectTrigger id="max-tokens-select" data-testid="select-max-tokens">
-                              <SelectValue placeholder="Select max tokens" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="1024">1,024 tokens</SelectItem>
-                              <SelectItem value="2048">2,048 tokens</SelectItem>
-                              <SelectItem value="4096">4,096 tokens</SelectItem>
-                              <SelectItem value="8192">8,192 tokens</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">System Prompt</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="system-prompt" className="text-sm">System Prompt</Label>
-                          <Textarea
-                            id="system-prompt"
-                            placeholder="You are a helpful AI assistant..."
-                            value={systemPrompt}
-                            onChange={(e) => setSystemPrompt(e.target.value)}
-                            className="min-h-[100px] resize-none"
-                            data-testid="textarea-system-prompt"
                           />
                         </div>
 

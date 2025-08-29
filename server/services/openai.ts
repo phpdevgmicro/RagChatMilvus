@@ -13,7 +13,6 @@ const openai = new OpenAI({
 export interface ChatResponse {
   content: string;
   sources: string[];
-  embedding: number[];
 }
 
 export async function generateChatResponse(
@@ -41,53 +40,34 @@ export async function generateChatResponse(
       throw new Error("System prompt not configured in database");
     }
     
-    // Build simple messages array
-    const messages: ChatCompletionMessageParam[] = [];
-    
-    // System prompt from database
-    messages.push({
-      role: "system",
-      content: settings.systemPrompt
-    });
-    
+    // Build input string for Response API
+    let input = settings.systemPrompt + "\n\n";
+    console.log(previousAssistantResponses);
     // Add previous relevant conversations as context
-    for (const prev of previousAssistantResponses) {
-      messages.push({
-        role: "user",
-        content: prev.query
-      });
-      messages.push({
-        role: "assistant", 
-        content: prev.response
-      });
+    if (previousAssistantResponses.length > 0) {
+      input += "Previous conversation context:\n";
+      for (const prev of previousAssistantResponses) {
+        input += `User: ${prev.query}\nAssistant: ${prev.response}\n\n`;
+      }
+      input += "Current query:\n";
     }
     
-    // Current user message - simple and direct
-    messages.push({
-      role: "user", 
-      content: query
-    });
+    // Add current user query
+    input += query;
 
-    const response = await openai.chat.completions.create({
+    // Use Response API with correct parameter name
+    const response = await openai.responses.create({
       model,
-      messages,
-      max_tokens: maxTokens,
-      temperature,
-      stream: false, // Ensure we're not using streaming
+      input,
+      max_output_tokens: maxTokens,
+      stream: false,
     });
-
-    const content = response.choices[0].message.content || "";
-    
-    // Generate embedding for the response
-    const embeddingResponse = await openai.embeddings.create({
-      model: "text-embedding-ada-002",
-      input: content,
-    });
+  console.log(response);
+    const content = response.output_text || "";
 
     return {
       content,
       sources: previousAssistantResponses.length > 0 ? ["Previous Conversations"] : [],
-      embedding: embeddingResponse.data[0].embedding,
     };
   } catch (error) {
     console.error("OpenAI API error:", error);
@@ -98,7 +78,7 @@ export async function generateChatResponse(
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
     const response = await openai.embeddings.create({
-      model: "text-embedding-ada-002",
+      model: "text-embedding-3-small",
       input: text,
     });
     

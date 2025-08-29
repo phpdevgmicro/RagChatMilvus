@@ -57,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const queryEmbedding = await generateEmbedding(content);
         const similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 3);
-        
+        console.log(similarResults);
         if (similarResults.length > 0) {
           previousConversations = similarResults.map(result => ({
             query: result.query,
@@ -114,18 +114,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save to vector database asynchronously (don't block response)
       if (shouldSaveToVector) {
         // Fire and forget - don't await this
-        qdrantService
-          .insertVector({
-            id: randomUUID(),
-            query: content,
-            response: aiResponse.content,
-            embedding: aiResponse.embedding,
-            sources: aiResponse.sources,
-            timestamp: new Date().toISOString(),
-          })
-          .catch((error) => {
+        (async () => {
+          try {
+            const embedding = await generateEmbedding(aiResponse.content);
+            await qdrantService.insertVector({
+              id: randomUUID(),
+              query: content,
+              response: aiResponse.content,
+              embedding,
+              sources: aiResponse.sources,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (error) {
             console.error("Error saving to vector database:", error);
-          });
+          }
+        })();
       }
 
       res.json({
@@ -268,16 +271,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Clear database
+  // Clear chat history
   app.delete("/api/clear-database", async (req, res) => {
     try {
-      await qdrantService.clearCollection();
-      chatMessages = []; // Clear in-memory chat messages
+      chatMessages = []; // Clear in-memory chat messages only
 
-      res.json({ message: "Database cleared successfully" });
+      res.json({ message: "Chat history cleared successfully" });
     } catch (error) {
-      console.error("Error clearing database:", error);
-      res.status(500).json({ message: "Failed to clear database" });
+      console.error("Error clearing chat history:", error);
+      res.status(500).json({ message: "Failed to clear chat history" });
     }
   });
 
