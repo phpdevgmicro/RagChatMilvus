@@ -5,26 +5,19 @@ import { eq } from 'drizzle-orm';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Handle Supabase connection string and SSL configuration
-let connectionString = process.env.DATABASE_URL;
-const isSupabase = connectionString?.includes('supabase.com');
-
-if (isSupabase && connectionString) {
-  // Replace sslmode=require with sslmode=disable to avoid certificate issues in development
-  connectionString = connectionString.replace('sslmode=require', 'sslmode=disable');
-}
-
+// Use Replit database connection
 const pool = new Pool({
-  connectionString,
-  ssl: isSupabase
-    ? { rejectUnauthorized: false } // ✅ enable SSL for Supabase
-    : undefined,
+  connectionString: process.env.DATABASE_URL,
 });
 
 // Initialize Drizzle ORM
 export const db = drizzle(pool);
 
 export { pool };
+
+// Settings cache for performance optimization
+let settingsCache: Record<string, string> | null = null;
+let cacheInitialized = false;
 
 export async function initializeDatabase() {
   try {
@@ -54,11 +47,44 @@ export async function initializeDatabase() {
       console.log('Database already contains settings - skipping defaults');
     }
 
+    // Initialize settings cache after database setup
+    await loadSettingsToCache();
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);
     throw error;
   }
+}
+
+// Load all settings into cache for fast access
+export async function loadSettingsToCache(): Promise<void> {
+  try {
+    const allSettings = await db.select().from(settings);
+    settingsCache = {};
+    
+    for (const setting of allSettings) {
+      settingsCache[setting.key] = setting.value;
+    }
+    
+    cacheInitialized = true;
+    console.log('Settings cache loaded with', Object.keys(settingsCache).length, 'settings');
+  } catch (error) {
+    console.error('Error loading settings to cache:', error);
+    throw error;
+  }
+}
+
+// Get all settings from cache (fast)
+export function getAllSettingsFromCache(): Record<string, string> {
+  if (!cacheInitialized || !settingsCache) {
+    throw new Error('Settings cache not initialized. Please call loadSettingsToCache() first.');
+  }
+  return { ...settingsCache };
+}
+
+// Invalidate cache when settings are updated
+export async function invalidateSettingsCache(): Promise<void> {
+  await loadSettingsToCache();
 }
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -86,24 +112,12 @@ export async function setSetting(key: string, value: string): Promise<void> {
           updatedAt: new Date()
         }
       });
+    
+    // Invalidate cache after updating settings
+    await invalidateSettingsCache();
   } catch (error) {
     console.error('Error setting setting:', error);
     throw error;
   }
 }
 
-export async function getAllSettings(): Promise<Record<string, string>> {
-  try {
-    const result = await db.select({ key: settings.key, value: settings.value })
-      .from(settings);
-    
-    const settingsObj: Record<string, string> = {};
-    for (const row of result) {
-      settingsObj[row.key] = row.value;
-    }
-    return settingsObj;
-  } catch (error) {
-    console.error('Error getting all settings:', error);
-    throw error;
-  }
-}

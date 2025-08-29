@@ -6,7 +6,7 @@ import {
   checkOpenAIConnection,
 } from "./services/openai";
 import { qdrantService, type ChatMessage } from "./services/qdrant";
-import { getAllSettings, setSetting } from "./services/database";
+import { getAllSettingsFromCache, setSetting } from "./services/database";
 import { randomUUID } from "crypto";
 
 // In-memory chat storage for the session
@@ -30,13 +30,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send chat message and get AI response
+  // Send chat message and get AI response  
   app.post("/api/messages", async (req, res) => {
+    const requestStartTime = Date.now();
+    
     try {
-      const {
-        content,
-        saveToVector = false,
-      } = req.body;
+      const { content } = req.body;
 
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
@@ -52,24 +51,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       chatMessages.push(userMessage);
 
-      // Search vector database for previous similar conversations
+      // Get cached settings (fast - no database call)
+      const settings = getAllSettingsFromCache();
+      
+      // Enhanced vector database semantic search for context
       let previousConversations: Array<{query: string, response: string}> = [];
-      try {
-        const queryEmbedding = await generateEmbedding(content);
-        const similarResults = await qdrantService.searchSimilar(queryEmbedding, 0.7, 3);
-        console.log(similarResults);
-        if (similarResults.length > 0) {
-          previousConversations = similarResults.map(result => ({
-            query: result.query,
-            response: result.response
-          }));
+      if (qdrantService.getConnectionStatus()) {
+        try {
+          console.log('🔍 Performing vector search for:', content.substring(0, 50) + '...');
+          
+          // Adaptive threshold based on query length and complexity
+          const isShortQuery = content.trim().split(' ').length <= 3;
+          const threshold = isShortQuery ? 0.15 : 0.25; // Lower threshold for short queries
+          
+          console.log(`📏 Query length: ${content.trim().split(' ').length} words, using threshold: ${threshold}`);
+          
+          const queryEmbedding = await generateEmbedding(content);
+          console.log('📊 Generated embedding with', queryEmbedding.length, 'dimensions');
+          
+          // Use adaptive threshold
+          const similarResults = await qdrantService.searchSimilar(queryEmbedding, threshold, 5);
+          console.log('🎯 Vector search found', similarResults.length, 'similar conversations');
+          
+          if (similarResults.length > 0) {
+            // Show similarity scores for debugging
+            console.log('📊 Similarity scores:', similarResults.map(r => `${r.similarity.toFixed(3)}`).join(', '));
+            
+            previousConversations = similarResults.map(result => ({
+              query: result.query,
+              response: result.response
+            }));
+            console.log('✅ Using', previousConversations.length, 'previous conversations as context');
+            console.log('📝 Context queries:', previousConversations.map(p => p.query.substring(0, 30) + '...'));
+          } else {
+            console.log('❌ No similar conversations found - proceeding without context');
+          }
+        } catch (error) {
+          console.error("❌ Vector search failed:", error);
         }
-      } catch (error) {
-        console.error("Error searching vector database:", error);
+      } else {
+        console.log('⚠️  Vector database not connected - no semantic search');
       }
-
-      // Get fresh settings from database every time
-      const settings = await getAllSettings();
       
       // ALWAYS use database settings only - never use request parameters
       const currentModel = settings.model;
@@ -97,39 +119,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxTokens: currentMaxTokens,
       }, settings);
 
-      // Use the saveToVector flag directly from user input
-      const shouldSaveToVector = saveToVector;
-
-      // Save AI response
+      // Save AI response (vector saving is handled manually via UI toggles)
       const assistantMessage: ChatMessage = {
         id: randomUUID(),
         content: aiResponse.content,
         role: "assistant",
         timestamp: new Date(),
         sources: aiResponse.sources,
-        savedToVector: shouldSaveToVector,
+        savedToVector: false, // Only set to true via manual PATCH endpoint
       };
       chatMessages.push(assistantMessage);
 
-      // Save to vector database asynchronously (don't block response)
-      if (shouldSaveToVector) {
-        // Fire and forget - don't await this
-        (async () => {
-          try {
-            const embedding = await generateEmbedding(aiResponse.content);
-            await qdrantService.insertVector({
-              id: randomUUID(),
-              query: content,
-              response: aiResponse.content,
-              embedding,
-              sources: aiResponse.sources,
-              timestamp: new Date().toISOString(),
-            });
-          } catch (error) {
-            console.error("Error saving to vector database:", error);
-          }
-        })();
-      }
+      const totalDuration = Date.now() - requestStartTime;
+      console.log(`Message processed in ${totalDuration}ms`);
 
       res.json({
         userMessage,
@@ -210,28 +212,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vector similarity search
-  app.post("/api/search-similar", async (req, res) => {
-    try {
-      const { query, threshold = 0.7, limit = 10 } = req.body;
-
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ message: "Query is required" });
-      }
-
-      const queryEmbedding = await generateEmbedding(query);
-      const results = await qdrantService.searchSimilar(
-        queryEmbedding,
-        threshold,
-        limit,
-      );
-
-      res.json(results);
-    } catch (error) {
-      console.error("Error searching similar responses:", error);
-      res.status(500).json({ message: "Failed to search similar responses" });
-    }
-  });
 
   // Get connection status
   app.get("/api/status", async (req, res) => {
@@ -283,32 +263,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get system prompt
-  app.get("/api/prompts", async (req, res) => {
-    try {
-      const settings = await getAllSettings();
-      res.json({
-        systemPrompt: settings.systemPrompt || "You are a helpful AI assistant."
-      });
-    } catch (error) {
-      console.error("Error fetching system prompt:", error);
-      res.status(500).json({ message: "Failed to fetch system prompt" });
-    }
-  });
-
-  // Update system prompt
-  app.put("/api/prompts", async (req, res) => {
-    try {
-      const { systemPrompt } = req.body;
-      
-      if (systemPrompt) await setSetting('systemPrompt', systemPrompt);
-
-      res.json({ message: "System prompt updated successfully" });
-    } catch (error) {
-      console.error("Error updating system prompt:", error);
-      res.status(500).json({ message: "Failed to update system prompt" });
-    }
-  });
 
   // Update all settings (model configuration + system prompt)
   app.put("/api/settings", async (req, res) => {
@@ -335,10 +289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all settings including model configuration
+  // Get all settings including model configuration (using cache)
   app.get("/api/settings", async (req, res) => {
     try {
-      const settings = await getAllSettings();
+      const settings = getAllSettingsFromCache();
       res.json({
         systemPrompt: settings.systemPrompt || "You are a helpful AI assistant.",
         model: settings.model || "gpt-4o-mini",
@@ -347,7 +301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error fetching settings:", error);
-      res.status(500).json({ message: "Failed to update settings" });
+      res.status(500).json({ message: "Failed to fetch settings" });
     }
   });
 

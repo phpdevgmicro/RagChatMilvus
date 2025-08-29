@@ -85,17 +85,29 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
                   {message.role === "assistant" && (
                     <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/30">
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`save-${message.id}`}
-                          checked={message.savedToVector || false}
-                          onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
-                          disabled={isUpdating && updatingMessageId === message.id}
-                          className="w-3 h-3"
-                          data-testid={`checkbox-save-${message.id}`}
-                        />
-                        <Label htmlFor={`save-${message.id}`} className="text-xs cursor-pointer text-muted-foreground">
-                          Save to RAG
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            id={`save-${message.id}`}
+                            checked={message.savedToVector || false}
+                            onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
+                            disabled={isUpdating && updatingMessageId === message.id}
+                            className={`w-3 h-3 ${
+                              isUpdating && updatingMessageId === message.id ? 'opacity-50' : ''
+                            }`}
+                            data-testid={`checkbox-save-${message.id}`}
+                          />
+                          {isUpdating && updatingMessageId === message.id && (
+                            <Loader2 className="w-3 h-3 absolute -top-0.5 -right-0.5 animate-spin text-primary" />
+                          )}
+                        </div>
+                        <Label 
+                          htmlFor={`save-${message.id}`} 
+                          className={`text-xs cursor-pointer text-muted-foreground ${
+                            isUpdating && updatingMessageId === message.id ? 'opacity-50' : ''
+                          }`}
+                        >
+                          {isUpdating && updatingMessageId === message.id ? 'Saving...' : 'Save to RAG'}
                         </Label>
                       </div>
                       <span className="text-xs text-muted-foreground">{formatTime(message.timestamp)}</span>

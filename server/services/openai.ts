@@ -21,56 +21,56 @@ export async function generateChatResponse(
   options: { temperature?: number; model?: string; maxTokens?: number } = {},
   settings?: Record<string, string>
 ): Promise<ChatResponse> {
+  const startTime = Date.now();
+  
   try {
     const { temperature, model, maxTokens } = options;
     
-    // Validate all required parameters are provided
-    if (temperature === undefined) {
-      throw new Error("Temperature parameter is required");
-    }
-    if (!model) {
-      throw new Error("Model parameter is required");
-    }
-    if (!maxTokens) {
-      throw new Error("MaxTokens parameter is required");
-    }
+    // Fast validation with early returns
+    if (temperature === undefined) throw new Error("Temperature parameter is required");
+    if (!model) throw new Error("Model parameter is required");
+    if (!maxTokens) throw new Error("MaxTokens parameter is required");
+    if (!settings?.systemPrompt) throw new Error("System prompt not configured in database");
     
-    // Only need system prompt from database
-    if (!settings?.systemPrompt) {
-      throw new Error("System prompt not configured in database");
-    }
-    
-    // Build input string for Response API
+    // Build optimized input string
     let input = settings.systemPrompt + "\n\n";
-    console.log(previousAssistantResponses);
-    // Add previous relevant conversations as context
+    
+    // Add context only if available (avoid empty context overhead)
     if (previousAssistantResponses.length > 0) {
-      input += "Previous conversation context:\n";
-      for (const prev of previousAssistantResponses) {
-        input += `User: ${prev.query}\nAssistant: ${prev.response}\n\n`;
+      input += "Context:\n";
+      // Limit context to prevent token overflow
+      const contextLimit = Math.min(previousAssistantResponses.length, 2);
+      for (let i = 0; i < contextLimit; i++) {
+        const prev = previousAssistantResponses[i];
+        input += `Q: ${prev.query}\nA: ${prev.response}\n\n`;
       }
-      input += "Current query:\n";
     }
     
-    // Add current user query
     input += query;
 
-    // Use Response API with correct parameter name
-    const response = await openai.responses.create({
-      model,
-      input,
-      max_output_tokens: maxTokens,
-      stream: false,
-    });
-  console.log(response);
-    const content = response.output_text || "";
+    // Optimized API call with timeout
+    const response = await Promise.race([
+      openai.responses.create({
+        model,
+        input,
+        max_output_tokens: maxTokens,
+        stream: false,
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('OpenAI API timeout')), 15000)
+      )
+    ]) as any;
+
+    const duration = Date.now() - startTime;
+    console.log(`OpenAI response generated in ${duration}ms`);
 
     return {
-      content,
-      sources: previousAssistantResponses.length > 0 ? ["Previous Conversations"] : [],
+      content: response.output_text || "",
+      sources: previousAssistantResponses.length > 0 ? ["Context"] : [],
     };
   } catch (error) {
-    console.error("OpenAI API error:", error);
+    const duration = Date.now() - startTime;
+    console.error(`OpenAI API error after ${duration}ms:`, error);
     throw new Error("Failed to generate response: " + (error as Error).message);
   }
 }
