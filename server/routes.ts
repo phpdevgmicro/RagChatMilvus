@@ -6,6 +6,7 @@ import {
   checkOpenAIConnection,
 } from "./services/openai";
 import { qdrantService, type ChatMessage } from "./services/qdrant";
+import { getAllSettings, setSetting } from "./services/database";
 import { randomUUID } from "crypto";
 
 // In-memory chat storage for the session
@@ -69,12 +70,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error searching vector database:", error);
       }
 
+      // Get settings from database
+      const settings = await getAllSettings();
+      const currentModel = settings.model || model;
+      const currentTemperature = parseFloat(settings.temperature || temperature.toString());
+      const currentMaxTokens = parseInt(settings.maxTokens || maxTokens.toString());
+
       // Generate AI response with context from semantic search
       const aiResponse = await generateChatResponse(content, contextFromPreviousChats, {
-        temperature,
-        model,
-        maxTokens,
-      });
+        temperature: currentTemperature,
+        model: currentModel,
+        maxTokens: currentMaxTokens,
+      }, settings);
 
       // Use the saveToVector flag directly from user input
       const shouldSaveToVector = saveToVector;
@@ -257,6 +264,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clearing database:", error);
       res.status(500).json({ message: "Failed to clear database" });
+    }
+  });
+
+  // Get prompt settings
+  app.get("/api/prompts", async (req, res) => {
+    try {
+      const settings = await getAllSettings();
+      res.json({
+        systemPrompt: settings.systemPrompt || "You are a helpful AI assistant.",
+        userPromptTemplate: settings.userPromptTemplate || "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.",
+        userPromptNoContext: settings.userPromptNoContext || "User Question: {query}\n\nPlease provide a comprehensive and helpful answer."
+      });
+    } catch (error) {
+      console.error("Error fetching prompt settings:", error);
+      res.status(500).json({ message: "Failed to fetch prompt settings" });
+    }
+  });
+
+  // Update prompt settings
+  app.put("/api/prompts", async (req, res) => {
+    try {
+      const { systemPrompt, userPromptTemplate, userPromptNoContext } = req.body;
+      
+      if (systemPrompt) await setSetting('systemPrompt', systemPrompt);
+      if (userPromptTemplate) await setSetting('userPromptTemplate', userPromptTemplate);
+      if (userPromptNoContext) await setSetting('userPromptNoContext', userPromptNoContext);
+
+      res.json({ message: "Prompts updated successfully" });
+    } catch (error) {
+      console.error("Error updating prompt settings:", error);
+      res.status(500).json({ message: "Failed to update prompt settings" });
+    }
+  });
+
+  // Update all settings (model configuration + prompts)
+  app.put("/api/settings", async (req, res) => {
+    try {
+      const { 
+        systemPrompt, 
+        userPromptTemplate, 
+        userPromptNoContext,
+        model,
+        temperature,
+        maxTokens 
+      } = req.body;
+      
+      // Update prompt settings
+      if (systemPrompt) await setSetting('systemPrompt', systemPrompt);
+      if (userPromptTemplate) await setSetting('userPromptTemplate', userPromptTemplate);
+      if (userPromptNoContext) await setSetting('userPromptNoContext', userPromptNoContext);
+      
+      // Update model settings
+      if (model) await setSetting('model', model);
+      if (temperature !== undefined) await setSetting('temperature', temperature.toString());
+      if (maxTokens !== undefined) await setSetting('maxTokens', maxTokens.toString());
+
+      res.json({ message: "Settings updated successfully" });
+    } catch (error) {
+      console.error("Error updating settings:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Get all settings including model configuration
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const settings = await getAllSettings();
+      res.json({
+        systemPrompt: settings.systemPrompt || "You are a helpful AI assistant.",
+        userPromptTemplate: settings.userPromptTemplate || "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.",
+        userPromptNoContext: settings.userPromptNoContext || "User Question: {query}\n\nPlease provide a comprehensive and helpful answer.",
+        model: settings.model || "gpt-4o-mini",
+        temperature: parseFloat(settings.temperature || "1.0"),
+        maxTokens: parseInt(settings.maxTokens || "2048")
+      });
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
     }
   });
 

@@ -5,6 +5,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
 });
 
+// Configurable prompts
+let systemPrompt = "You are a helpful AI assistant. Provide clear, concise, and accurate responses. When context is provided, use it to enhance your answers.";
+let userPromptTemplate = "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.";
+let userPromptNoContext = "User Question: {query}\n\nPlease provide a comprehensive and helpful answer.";
+
 export interface ChatResponse {
   content: string;
   sources: string[];
@@ -14,21 +19,27 @@ export interface ChatResponse {
 export async function generateChatResponse(
   query: string, 
   context: string = "",
-  options: { temperature?: number; model?: string; maxTokens?: number } = {}
+  options: { temperature?: number; model?: string; maxTokens?: number } = {},
+  settings?: Record<string, string>
 ): Promise<ChatResponse> {
   try {
     const { temperature = 0.7, model = "gpt-4o-mini", maxTokens = 1000 } = options;
     
+    // Use settings from database if provided, otherwise fall back to defaults
+    const currentSystemPrompt = settings?.systemPrompt || systemPrompt;
+    const currentUserPromptTemplate = settings?.userPromptTemplate || userPromptTemplate;
+    const currentUserPromptNoContext = settings?.userPromptNoContext || userPromptNoContext;
+    
     const prompt = context 
-      ? `Context: ${context}\n\nUser Question: ${query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.`
-      : `User Question: ${query}\n\nPlease provide a comprehensive and helpful answer.`;
+      ? currentUserPromptTemplate.replace('{context}', context).replace('{query}', query)
+      : currentUserPromptNoContext.replace('{query}', query);
 
     const response = await openai.chat.completions.create({
       model,
       messages: [
         {
           role: "system",
-          content: "You are a helpful AI assistant. Provide clear, concise, and accurate responses. When context is provided, use it to enhance your answers."
+          content: currentSystemPrompt
         },
         {
           role: "user",
@@ -82,3 +93,6 @@ export async function checkOpenAIConnection(): Promise<boolean> {
     return false;
   }
 }
+
+// Legacy prompt variables kept for fallback compatibility
+// These are now managed via database

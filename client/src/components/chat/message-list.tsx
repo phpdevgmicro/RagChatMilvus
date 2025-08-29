@@ -41,17 +41,16 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent" data-testid="message-list">
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-6">
+    <div className="max-w-4xl mx-auto px-4 py-4 space-y-4" data-testid="message-list">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center min-h-[50vh] sm:min-h-[60vh] text-center space-y-4 sm:space-y-6 px-4">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl flex items-center justify-center">
-              <Bot className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+            <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
+              <Bot className="h-6 w-6 text-primary" />
             </div>
-            <div className="max-w-sm sm:max-w-md space-y-2 sm:space-y-3">
-              <h3 className="text-xl sm:text-2xl font-bold text-foreground">Welcome to AI Assistant</h3>
-              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                Start a conversation and I'll provide intelligent, contextual responses. Use the settings to customize your experience.
+            <div className="max-w-md space-y-2">
+              <h3 className="text-xl font-semibold">AI Assistant</h3>
+              <p className="text-sm text-muted-foreground">
+                Start a conversation with RAG-enabled responses.
               </p>
             </div>
           </div>
@@ -60,79 +59,51 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex gap-3 sm:gap-4 group transition-all duration-200 hover:bg-muted/30 rounded-lg p-2 -mx-2 message-bubble ${
+            className={`flex gap-3 group ${
               message.role === "user" ? "flex-row-reverse" : ""
             }`}
           >
-            <Avatar className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 shadow-sm">
-              <AvatarFallback className={message.role === "user" ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border border-primary/20" : "bg-gradient-to-br from-muted to-muted/80 border border-border/50"}>
+            <Avatar className="w-8 h-8 shrink-0">
+              <AvatarFallback className={message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}>
                 {message.role === "user" ? (
                   <User className="h-4 w-4" />
                 ) : (
-                  <Bot className="h-4 w-4 text-muted-foreground" />
+                  <Bot className="h-4 w-4" />
                 )}
               </AvatarFallback>
             </Avatar>
             
-            <div className={`flex-1 max-w-[75%] space-y-2 ${
+            <div className={`flex-1 max-w-[75%] ${
               message.role === "user" ? "flex flex-col items-end" : ""
             }`}>
-              <Card className={`transition-all duration-200 ${
-                message.role === "user" 
-                  ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-md border-primary/20 hover:shadow-lg" 
-                  : "bg-card/80 backdrop-blur-sm border border-border/30 shadow-sm hover:shadow-md hover:border-border/50"
-              }`}>
-                <div className="p-3 sm:p-4">
-                  <div className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-medium" data-testid={`message-content-${message.id}`}>
+              <Card className={message.role === "user" ? "bg-primary text-primary-foreground" : "bg-card"}>
+                <div className="p-3">
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`message-content-${message.id}`}>
                     {message.content}
                   </div>
               
                   {message.role === "assistant" && (
-                    <div className="space-y-3 pt-3 mt-3 border-t border-border/30">
+                    <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/30">
                       <div className="flex items-center space-x-2">
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            id={`save-${message.id}`}
-                            checked={message.savedToVector || false}
-                            onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
-                            disabled={isUpdating && updatingMessageId === message.id}
-                            className="w-3 h-3 text-primary bg-transparent border border-input rounded-sm focus:ring-1 focus:ring-primary"
-                            data-testid={`checkbox-save-${message.id}`}
-                          />
-                          {isUpdating && updatingMessageId === message.id && (
-                            <Loader2 className="absolute inset-0 w-3 h-3 animate-spin text-primary" />
-                          )}
-                        </div>
-                        <Label htmlFor={`save-${message.id}`} className="text-xs cursor-pointer text-muted-foreground flex items-center gap-1">
-                          Save to vector database
-                          {isUpdating && updatingMessageId === message.id && (
-                            <span className="text-xs text-primary">Updating...</span>
-                          )}
-                          {!isUpdating && message.savedToVector && (
-                            <Check className="w-3 h-3 text-green-500" />
-                          )}
+                        <input
+                          type="checkbox"
+                          id={`save-${message.id}`}
+                          checked={message.savedToVector || false}
+                          onChange={(e) => onToggleVectorSave(message.id, e.target.checked)}
+                          disabled={isUpdating && updatingMessageId === message.id}
+                          className="w-3 h-3"
+                          data-testid={`checkbox-save-${message.id}`}
+                        />
+                        <Label htmlFor={`save-${message.id}`} className="text-xs cursor-pointer text-muted-foreground">
+                          Save to RAG
                         </Label>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground/70">
-                          {formatTime(message.timestamp)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigator.clipboard.writeText(message.content)}
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          data-testid={`button-copy-${message.id}`}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      <span className="text-xs text-muted-foreground">{formatTime(message.timestamp)}</span>
                     </div>
                   )}
               
                   {message.role === "user" && (
-                    <p className="text-xs mt-2 opacity-70">
+                    <p className="text-xs mt-2 text-primary-foreground/70">
                       {formatTime(message.timestamp)}
                     </p>
                   )}
@@ -143,10 +114,10 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
         ))}
       
         {isTyping && (
-          <div className="flex gap-4">
-            <Avatar className="w-9 h-9 shrink-0">
-              <AvatarFallback className="bg-muted border border-border">
-                <Bot className="h-4 w-4 text-muted-foreground" />
+          <div className="flex gap-3">
+            <Avatar className="w-8 h-8 shrink-0">
+              <AvatarFallback className="bg-muted">
+                <Bot className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             
@@ -166,7 +137,6 @@ export function MessageList({ messages, isLoading, onToggleVectorSave, isUpdatin
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

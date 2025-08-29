@@ -5,12 +5,14 @@ import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 // Define ChatMessage interface locally since we removed shared schema
@@ -36,6 +38,11 @@ export default function Chat() {
   const [maxTokens, setMaxTokens] = useState(2048);
   const [isTyping, setIsTyping] = useState(false);
   const [updatingMessageId, setUpdatingMessageId] = useState<string>();
+  
+  // Prompt settings state
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [userPromptTemplate, setUserPromptTemplate] = useState("");
+  const [userPromptNoContext, setUserPromptNoContext] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -53,6 +60,24 @@ export default function Chat() {
     queryKey: ["/api/status"],
     refetchInterval: 30000,
   });
+
+  // Fetch prompt settings
+  const { data: promptSettings } = useQuery<{
+    systemPrompt: string;
+    userPromptTemplate: string;
+    userPromptNoContext: string;
+  }>({
+    queryKey: ["/api/prompts"],
+  });
+
+  // Update local state when prompt settings are fetched
+  useEffect(() => {
+    if (promptSettings) {
+      setSystemPrompt(promptSettings.systemPrompt);
+      setUserPromptTemplate(promptSettings.userPromptTemplate);
+      setUserPromptNoContext(promptSettings.userPromptNoContext);
+    }
+  }, [promptSettings]);
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -155,6 +180,37 @@ export default function Chat() {
     },
   });
 
+  // Update prompt settings mutation
+  const updatePromptsMutation = useMutation({
+    mutationFn: async (settings: {
+      systemPrompt: string;
+      userPromptTemplate: string;
+      userPromptNoContext: string;
+      model: string;
+      temperature: number;
+      maxTokens: number;
+    }) => {
+      const response = await apiRequest("PUT", "/api/settings", settings);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "✓ Settings Updated",
+        description: "All settings have been saved successfully",
+        variant: "default",
+        duration: 3000,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "⚠️ Update Failed",
+        description: "Failed to update settings. Please try again.",
+        variant: "destructive",
+        duration: 4000,
+      });
+    },
+  });
+
   const handleSendMessage = (content: string) => {
     sendMessageMutation.mutate({
       content,
@@ -170,240 +226,222 @@ export default function Chat() {
     toggleVectorSaveMutation.mutate({ messageId, saveToVector });
   };
 
+  const handleUpdatePrompts = () => {
+    updatePromptsMutation.mutate({
+      systemPrompt,
+      userPromptTemplate,
+      userPromptNoContext,
+      model,
+      temperature,
+      maxTokens,
+    });
+  };
+
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   };
 
   useEffect(() => {
     const timer = setTimeout(() => {
       scrollToBottom();
-    }, 100);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [messages, isTyping]);
+  }, [messages]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const timer = setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length]);
 
   // Scroll when typing state changes
   useEffect(() => {
     if (isTyping) {
       const timer = setTimeout(() => {
         scrollToBottom();
-      }, 200);
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [isTyping]);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-background via-background/95 to-muted/10 safe-area-inset">
+    <div className="flex h-screen bg-background">
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-background/95 to-background/90 backdrop-blur-xl border-b border-border/30 shadow-lg">
+        <div className="px-4 py-3 border-b border-border">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-primary via-primary/90 to-primary/80 rounded-2xl flex items-center justify-center shadow-lg ring-2 ring-primary/20">
-                <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-primary-foreground" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
+                <MessageSquare className="h-4 w-4 text-primary-foreground" />
               </div>
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent truncate">AI Assistant</h1>
-                <p className="text-sm text-muted-foreground/80 hidden sm:block font-medium">Intelligent conversations with vector memory</p>
+              <div>
+                <h1 className="text-lg font-semibold">AI Assistant</h1>
+                <p className="text-xs text-muted-foreground">RAG-enabled chat</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-1 sm:gap-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  connectionStatus?.openai ? "bg-green-500" : "bg-red-500"
-                }`} />
-                <Badge variant={connectionStatus?.openai ? "outline" : "destructive"} className="text-xs hidden sm:inline-flex">
-                  {connectionStatus?.openai ? "AI Online" : "Offline"}
-                </Badge>
-              </div>
-
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus?.openai ? "bg-green-500" : "bg-red-500"
+              }`} />
+              
               <Button 
-                variant="outline" 
+                variant="ghost" 
                 size="sm" 
                 onClick={handleClearChat}
-                className="shrink-0"
-                title="Clear chat session"
+                title="Clear chat"
               >
-                <Trash2 className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Clear</span>
+                <Trash2 className="h-4 w-4" />
               </Button>
 
-              <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" data-testid="button-open-settings" className="shrink-0">
-                    <Settings className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Settings</span>
+              <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" data-testid="button-open-settings">
+                    <Settings className="h-4 w-4" />
                   </Button>
-                </SheetTrigger>
-                <SheetContent className="w-full sm:w-80 sm:max-w-80">
-                  <div className="space-y-4 sm:space-y-6 py-4">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3 sm:mb-4">Chat Settings</h3>
-                    </div>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-semibold">Settings</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
 
-                    <Card className="border-border/30 bg-card/50 backdrop-blur-sm">
-                      <CardHeader className="pb-4">
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <Settings className="h-4 w-4" />
-                          Model Configuration
-                        </CardTitle>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Model Configuration</CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-6">
-                        <div className="space-y-3">
-                          <Label htmlFor="model-select" className="text-sm font-medium flex items-center gap-2">
-                            AI Model
-                            <span className="text-xs text-muted-foreground font-normal">(affects response quality)</span>
-                          </Label>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="model-select" className="text-sm">Model</Label>
                           <Select value={model} onValueChange={setModel}>
-                            <SelectTrigger id="model-select" data-testid="select-model" className="h-11 bg-background/50">
+                            <SelectTrigger id="model-select" data-testid="select-model">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                              <SelectItem value="gpt-5" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-5</span>
-                                  <span className="text-xs text-muted-foreground">Latest model, best performance</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-5-mini" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-5 Mini</span>
-                                  <span className="text-xs text-muted-foreground">Fast and efficient</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-5-nano" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-5 Nano</span>
-                                  <span className="text-xs text-muted-foreground">Ultra-lightweight</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-4.1-mini" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-4.1 Mini</span>
-                                  <span className="text-xs text-muted-foreground">Balanced performance</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-4o" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-4o</span>
-                                  <span className="text-xs text-muted-foreground">Optimized model</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-4o-mini" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-4o Mini</span>
-                                  <span className="text-xs text-muted-foreground">Cost-effective</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-4-turbo" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-4 Turbo</span>
-                                  <span className="text-xs text-muted-foreground">Powerful, slower</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="gpt-3.5-turbo" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>GPT-3.5 Turbo</span>
-                                  <span className="text-xs text-muted-foreground">Budget option</span>
-                                </div>
-                              </SelectItem>
+                            <SelectContent>
+                              <SelectItem value="gpt-5">GPT-5</SelectItem>
+                              <SelectItem value="gpt-5-mini">GPT-5 Mini</SelectItem>
+                              <SelectItem value="gpt-5-nano">GPT-5 Nano</SelectItem>
+                              <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                              <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                              <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                              <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                              <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <div className="flex justify-between items-center">
-                            <Label htmlFor="temperature-slider" className="text-sm font-medium">
-                              Temperature
-                            </Label>
-                            <div className="bg-primary/10 px-2 py-1 rounded text-sm font-mono border">
-                              {temperature.toFixed(1)}
-                            </div>
+                            <Label htmlFor="temperature-slider" className="text-sm">Temperature</Label>
+                            <span className="text-sm font-mono">{temperature.toFixed(1)}</span>
                           </div>
-                          <div className="px-1">
-                            <Slider
-                              id="temperature-slider"
-                              min={0}
-                              max={2}
-                              step={0.1}
-                              value={[temperature]}
-                              onValueChange={(value) => setTemperature(value[0])}
-                              className="w-full"
-                              data-testid="slider-temperature"
-                            />
-                          </div>
-                          <div className="flex justify-between text-xs text-muted-foreground font-medium">
-                            <span>🎯 Focused (0.0)</span>
-                            <span>⚖️ Balanced (1.0)</span>
-                            <span>🎨 Creative (2.0)</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground/80">
-                            Lower values make responses more focused and deterministic
-                          </p>
+                          <Slider
+                            id="temperature-slider"
+                            min={0}
+                            max={2}
+                            step={0.1}
+                            value={[temperature]}
+                            onValueChange={(value) => setTemperature(value[0])}
+                            className="w-full"
+                            data-testid="slider-temperature"
+                          />
                         </div>
 
-                        <div className="space-y-3">
-                          <Label htmlFor="max-tokens-select" className="text-sm font-medium flex items-center gap-2">
-                            Max Tokens
-                            <span className="text-xs text-muted-foreground font-normal">(response length)</span>
-                          </Label>
+                        <div className="space-y-2">
+                          <Label htmlFor="max-tokens-select" className="text-sm">Max Tokens</Label>
                           <Select value={maxTokens.toString()} onValueChange={(value) => setMaxTokens(Number(value))}>
-                            <SelectTrigger id="max-tokens-select" data-testid="select-max-tokens" className="h-11 bg-background/50">
+                            <SelectTrigger id="max-tokens-select" data-testid="select-max-tokens">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="1024" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>1,024 tokens</span>
-                                  <span className="text-xs text-muted-foreground">~750 words, quick responses</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="2048" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>2,048 tokens ⭐</span>
-                                  <span className="text-xs text-muted-foreground">~1,500 words, balanced</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="4096" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>4,096 tokens</span>
-                                  <span className="text-xs text-muted-foreground">~3,000 words, detailed</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="8192" className="font-medium">
-                                <div className="flex flex-col items-start">
-                                  <span>8,192 tokens</span>
-                                  <span className="text-xs text-muted-foreground">~6,000 words, very detailed</span>
-                                </div>
-                              </SelectItem>
+                              <SelectItem value="1024">1,024 tokens</SelectItem>
+                              <SelectItem value="2048">2,048 tokens</SelectItem>
+                              <SelectItem value="4096">4,096 tokens</SelectItem>
+                              <SelectItem value="8192">8,192 tokens</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                       </CardContent>
                     </Card>
 
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Prompt Settings</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="system-prompt" className="text-sm">System Prompt</Label>
+                          <Textarea
+                            id="system-prompt"
+                            placeholder="You are a helpful AI assistant..."
+                            value={systemPrompt}
+                            onChange={(e) => setSystemPrompt(e.target.value)}
+                            className="min-h-[60px] resize-none"
+                            data-testid="textarea-system-prompt"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="user-prompt-template" className="text-sm">User Prompt (with context)</Label>
+                          <Textarea
+                            id="user-prompt-template"
+                            placeholder="Context: {context}&#10;&#10;User Question: {query}&#10;&#10;Please provide a comprehensive answer."
+                            value={userPromptTemplate}
+                            onChange={(e) => setUserPromptTemplate(e.target.value)}
+                            className="min-h-[80px] resize-none"
+                            data-testid="textarea-user-prompt-template"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="user-prompt-no-context" className="text-sm">User Prompt (no context)</Label>
+                          <Textarea
+                            id="user-prompt-no-context"
+                            placeholder="User Question: {query}&#10;&#10;Please provide a helpful answer."
+                            value={userPromptNoContext}
+                            onChange={(e) => setUserPromptNoContext(e.target.value)}
+                            className="min-h-[60px] resize-none"
+                            data-testid="textarea-user-prompt-no-context"
+                          />
+                        </div>
+
+                        <Button
+                          onClick={handleUpdatePrompts}
+                          disabled={updatePromptsMutation.isPending}
+                          className="w-full"
+                          data-testid="button-update-settings"
+                        >
+                          {updatePromptsMutation.isPending ? "Saving..." : "Save Settings"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+
                   </div>
-                </SheetContent>
-              </Sheet>
+                </DialogContent>
+              </Dialog>
 
               <ThemeToggle />
             </div>
           </div>
         </div>
 
-        <MessageList
-          messages={messages}
-          isLoading={messagesLoading}
-          onToggleVectorSave={handleToggleVectorSave}
-          isUpdating={toggleVectorSaveMutation.isPending}
-          isTyping={isTyping}
-          updatingMessageId={updatingMessageId}
-        />
-
-        {/* Scroll anchor */}
-        <div ref={messagesEndRef} />
+        <div className="flex-1 overflow-y-auto">
+          <MessageList
+            messages={messages}
+            isLoading={messagesLoading}
+            onToggleVectorSave={handleToggleVectorSave}
+            isUpdating={toggleVectorSaveMutation.isPending}
+            isTyping={isTyping}
+            updatingMessageId={updatingMessageId}
+          />
+          {/* Scroll anchor */}
+          <div ref={messagesEndRef} />
+        </div>
 
         <ChatInput
           onSendMessage={handleSendMessage}
