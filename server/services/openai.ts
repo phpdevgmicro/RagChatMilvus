@@ -1,14 +1,12 @@
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
 });
 
-// Configurable prompts
-let systemPrompt = "You are a helpful AI assistant. Provide clear, concise, and accurate responses. When context is provided, use it to enhance your answers.";
-let userPromptTemplate = "Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.";
-let userPromptNoContext = "User Question: {query}\n\nPlease provide a comprehensive and helpful answer.";
+// No hardcoded prompts - everything comes from database
 
 export interface ChatResponse {
   content: string;
@@ -23,29 +21,61 @@ export async function generateChatResponse(
   settings?: Record<string, string>
 ): Promise<ChatResponse> {
   try {
-    const { temperature = 0.7, model = "gpt-4o-mini", maxTokens = 1000 } = options;
+    const { temperature, model, maxTokens } = options;
     
-    // Use settings from database if provided, otherwise fall back to defaults
-    const currentSystemPrompt = settings?.systemPrompt || systemPrompt;
-    const currentUserPromptTemplate = settings?.userPromptTemplate || userPromptTemplate;
-    const currentUserPromptNoContext = settings?.userPromptNoContext || userPromptNoContext;
+    // Validate all required parameters are provided
+    if (temperature === undefined) {
+      throw new Error("Temperature parameter is required");
+    }
+    if (!model) {
+      throw new Error("Model parameter is required");
+    }
+    if (!maxTokens) {
+      throw new Error("MaxTokens parameter is required");
+    }
     
-    const prompt = context 
-      ? currentUserPromptTemplate.replace('{context}', context).replace('{query}', query)
+    // Use settings from database - no fallbacks
+    if (!settings?.systemPrompt) {
+      throw new Error("System prompt not configured in database");
+    }
+    if (!settings?.userPromptTemplate) {
+      throw new Error("User prompt template not configured in database");
+    }
+    if (!settings?.userPromptNoContext) {
+      throw new Error("User prompt (no context) not configured in database");
+    }
+    
+    const currentSystemPrompt = settings.systemPrompt;
+    const currentUserPromptTemplate = settings.userPromptTemplate;
+    const currentUserPromptNoContext = settings.userPromptNoContext;
+    
+    // Build messages array with context as assistant memory
+    const messages: ChatCompletionMessageParam[] = [];
+    
+    // Enhanced system prompt that includes conversation memory
+    let systemPromptWithMemory = currentSystemPrompt;
+    if (context) {
+      systemPromptWithMemory += `\n\nIMPORTANT: You have access to relevant memories from previous conversations. Use this context naturally as if you remember these past interactions:\n\n${context}\n\nUse this memory to provide more contextual and personalized responses. Reference previous conversations when relevant.`;
+    }
+    
+    messages.push({
+      role: "system",
+      content: systemPromptWithMemory
+    });
+    
+    // Simple user query without context manipulation
+    const userPrompt = context 
+      ? currentUserPromptTemplate.replace('{context}', '').replace('{query}', query).trim()
       : currentUserPromptNoContext.replace('{query}', query);
+    
+    messages.push({
+      role: "user", 
+      content: userPrompt
+    });
 
     const response = await openai.chat.completions.create({
       model,
-      messages: [
-        {
-          role: "system",
-          content: currentSystemPrompt
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
+      messages,
       max_tokens: maxTokens,
       temperature,
       stream: false, // Ensure we're not using streaming

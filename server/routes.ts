@@ -36,9 +36,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         content,
         saveToVector = false,
-        temperature = 0.5,
-        model = "gpt-4o-mini",
-        maxTokens = 2048,
+        temperature,
+        model,
+        maxTokens,
       } = req.body;
 
       if (!content || typeof content !== "string") {
@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (similarResults.length > 0) {
           contextFromPreviousChats = similarResults.map((result, index) => 
-            `Previous Context ${index + 1} (similarity: ${(result.similarity * 100).toFixed(1)}%):\nQ: ${result.query}\nA: ${result.response}\n`
+            `Memory ${index + 1} (relevance: ${(result.similarity * 100).toFixed(1)}%):\nUser previously asked: "${result.query}"\nYou responded: "${result.response}"\n`
           ).join("\n");
         }
       } catch (error) {
@@ -72,9 +72,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get settings from database
       const settings = await getAllSettings();
-      const currentModel = settings.model || model;
-      const currentTemperature = parseFloat(settings.temperature || temperature.toString());
-      const currentMaxTokens = parseInt(settings.maxTokens || maxTokens.toString());
+      
+      // Use database settings or request parameters - no hardcoded defaults
+      const currentModel = model || settings.model;
+      const currentTemperature = temperature !== undefined ? temperature : parseFloat(settings.temperature);
+      const currentMaxTokens = maxTokens || parseInt(settings.maxTokens);
+      
+      // Validate required settings exist
+      if (!currentModel || !settings.model) {
+        return res.status(400).json({ message: "Model not configured. Please set model in settings." });
+      }
+      if (isNaN(currentTemperature) || !settings.temperature) {
+        return res.status(400).json({ message: "Temperature not configured. Please set temperature in settings." });
+      }
+      if (!currentMaxTokens || !settings.maxTokens) {
+        return res.status(400).json({ message: "Max tokens not configured. Please set maxTokens in settings." });
+      }
 
       // Generate AI response with context from semantic search
       const aiResponse = await generateChatResponse(content, contextFromPreviousChats, {

@@ -33,9 +33,9 @@ interface ChatResponse {
 
 export default function Chat() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState("gpt-4.1-mini");
-  const [maxTokens, setMaxTokens] = useState(2048);
+  const [temperature, setTemperature] = useState<number | undefined>(undefined);
+  const [model, setModel] = useState<string>("");
+  const [maxTokens, setMaxTokens] = useState<number | undefined>(undefined);
   const [isTyping, setIsTyping] = useState(false);
   const [updatingMessageId, setUpdatingMessageId] = useState<string>();
   
@@ -61,23 +61,29 @@ export default function Chat() {
     refetchInterval: 30000,
   });
 
-  // Fetch prompt settings
-  const { data: promptSettings } = useQuery<{
+  // Fetch all settings (prompts + model configuration)
+  const { data: allSettings } = useQuery<{
     systemPrompt: string;
     userPromptTemplate: string;
     userPromptNoContext: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
   }>({
-    queryKey: ["/api/prompts"],
+    queryKey: ["/api/settings"],
   });
 
-  // Update local state when prompt settings are fetched
+  // Update local state when settings are fetched from database
   useEffect(() => {
-    if (promptSettings) {
-      setSystemPrompt(promptSettings.systemPrompt);
-      setUserPromptTemplate(promptSettings.userPromptTemplate);
-      setUserPromptNoContext(promptSettings.userPromptNoContext);
+    if (allSettings) {
+      setSystemPrompt(allSettings.systemPrompt);
+      setUserPromptTemplate(allSettings.userPromptTemplate);
+      setUserPromptNoContext(allSettings.userPromptNoContext);
+      setModel(allSettings.model);
+      setTemperature(allSettings.temperature);
+      setMaxTokens(allSettings.maxTokens);
     }
-  }, [promptSettings]);
+  }, [allSettings]);
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -102,6 +108,11 @@ export default function Chat() {
       // Scroll to bottom immediately when starting to type
       setTimeout(scrollToBottom, 50);
 
+      // Only send message if settings are loaded from database
+      if (!model || temperature === undefined || maxTokens === undefined) {
+        throw new Error("Settings not loaded from database. Please wait for configuration to load.");
+      }
+      
       const response = await apiRequest("POST", "/api/messages", {
         content,
         temperature,
@@ -194,6 +205,12 @@ export default function Chat() {
       return response.json();
     },
     onSuccess: () => {
+      // Auto-close the settings dialog
+      setIsSettingsOpen(false);
+      
+      // Invalidate queries to refresh data from database
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      
       toast({
         title: "✓ Settings Updated",
         description: "All settings have been saved successfully",
@@ -201,12 +218,25 @@ export default function Chat() {
         duration: 3000,
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Settings update error:", error);
+      
+      let errorMessage = "Failed to update settings. Please try again.";
+      if (error.message) {
+        if (error.message.includes('network')) {
+          errorMessage = "Network error. Please check your connection and try again.";
+        } else if (error.message.includes('401')) {
+          errorMessage = "Authentication failed. Please refresh the page.";
+        } else if (error.message.includes('500')) {
+          errorMessage = "Server error. Please try again in a moment.";
+        }
+      }
+      
       toast({
-        title: "⚠️ Update Failed",
-        description: "Failed to update settings. Please try again.",
+        title: "⚠️ Settings Update Failed",
+        description: errorMessage,
         variant: "destructive",
-        duration: 4000,
+        duration: 5000,
       });
     },
   });
@@ -218,8 +248,28 @@ export default function Chat() {
     });
   };
 
-  const handleClearChat = () => {
-    queryClient.setQueryData<ChatMessage[]>(["/api/messages"], []);
+  const handleClearChat = async () => {
+    try {
+      // Call the server API to clear messages
+      await apiRequest("DELETE", "/api/clear-database");
+      
+      // Then clear the local cache
+      queryClient.setQueryData<ChatMessage[]>(["/api/messages"], []);
+      
+      toast({
+        title: "✓ Chat Cleared",
+        description: "All messages have been deleted successfully",
+        variant: "default",
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: "⚠️ Clear Failed",
+        description: "Failed to clear chat. Please try again.",
+        variant: "destructive",
+        duration: 4000,
+      });
+    }
   };
 
   const handleToggleVectorSave = (messageId: string, saveToVector: boolean) => {
@@ -227,6 +277,17 @@ export default function Chat() {
   };
 
   const handleUpdatePrompts = () => {
+    // Only update if all settings are loaded from database
+    if (!model || temperature === undefined || maxTokens === undefined) {
+      toast({
+        title: "⚠️ Settings Not Loaded",
+        description: "Please wait for settings to load from database before updating.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+    
     updatePromptsMutation.mutate({
       systemPrompt,
       userPromptTemplate,
@@ -338,14 +399,14 @@ export default function Chat() {
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
                             <Label htmlFor="temperature-slider" className="text-sm">Temperature</Label>
-                            <span className="text-sm font-mono">{temperature.toFixed(1)}</span>
+                            <span className="text-sm font-mono">{temperature?.toFixed(1) || "0.0"}</span>
                           </div>
                           <Slider
                             id="temperature-slider"
                             min={0}
                             max={2}
                             step={0.1}
-                            value={[temperature]}
+                            value={[temperature || 0]}
                             onValueChange={(value) => setTemperature(value[0])}
                             className="w-full"
                             data-testid="slider-temperature"
@@ -354,9 +415,9 @@ export default function Chat() {
 
                         <div className="space-y-2">
                           <Label htmlFor="max-tokens-select" className="text-sm">Max Tokens</Label>
-                          <Select value={maxTokens.toString()} onValueChange={(value) => setMaxTokens(Number(value))}>
+                          <Select value={maxTokens?.toString() || ""} onValueChange={(value) => setMaxTokens(Number(value))}>
                             <SelectTrigger id="max-tokens-select" data-testid="select-max-tokens">
-                              <SelectValue />
+                              <SelectValue placeholder="Select max tokens" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="1024">1,024 tokens</SelectItem>

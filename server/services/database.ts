@@ -1,42 +1,55 @@
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import { settings } from '../../shared/schema';
+import { eq } from 'drizzle-orm';
+
+// Handle Supabase connection string and SSL configuration
+let connectionString = process.env.DATABASE_URL;
+const isSupabase = connectionString?.includes('supabase.com');
+
+if (isSupabase && connectionString) {
+  // Replace sslmode=require with sslmode=disable to avoid certificate issues in development
+  connectionString = connectionString.replace('sslmode=require', 'sslmode=disable');
+}
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  connectionString,
+  ssl: isSupabase ? false : undefined
 });
+
+// Initialize Drizzle ORM
+export const db = drizzle(pool);
 
 export { pool };
 
 export async function initializeDatabase() {
   try {
-    // Create settings table if it doesn't exist
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS settings (
-        id SERIAL PRIMARY KEY,
-        key VARCHAR(255) UNIQUE NOT NULL,
-        value TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    // Check if database has any settings at all
+    const existingSettings = await db.select().from(settings).limit(1);
+    
+    // Only insert defaults if database is completely empty (first time setup)
+    if (existingSettings.length === 0) {
+      console.log('Database is empty. Inserting minimal default settings for first-time setup...');
+      
+      const minimalDefaults = [
+        { key: 'systemPrompt', value: 'You are a helpful AI assistant.' },
+        { key: 'userPromptTemplate', value: 'Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.' },
+        { key: 'userPromptNoContext', value: 'User Question: {query}\n\nPlease provide a comprehensive and helpful answer.' },
+        { key: 'model', value: 'gpt-4o-mini' },
+        { key: 'temperature', value: '1.0' },
+        { key: 'maxTokens', value: '2048' }
+      ];
 
-    // Insert default settings if they don't exist
-    const defaultSettings = [
-      { key: 'systemPrompt', value: 'You are a helpful AI assistant.' },
-      { key: 'userPromptTemplate', value: 'Context: {context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context and your knowledge.' },
-      { key: 'userPromptNoContext', value: 'User Question: {query}\n\nPlease provide a comprehensive and helpful answer.' },
-      { key: 'model', value: 'gpt-4o-mini' },
-      { key: 'temperature', value: '1.0' },
-      { key: 'maxTokens', value: '2048' }
-    ];
-
-    for (const setting of defaultSettings) {
-      await pool.query(
-        'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
-        [setting.key, setting.value]
-      );
+      for (const setting of minimalDefaults) {
+        await db.insert(settings).values({
+          key: setting.key,
+          value: setting.value
+        });
+      }
+      
+      console.log('Minimal default settings inserted for first-time setup');
+    } else {
+      console.log('Database already contains settings - skipping defaults');
     }
 
     console.log('Database initialized successfully');
@@ -48,8 +61,12 @@ export async function initializeDatabase() {
 
 export async function getSetting(key: string): Promise<string | null> {
   try {
-    const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-    return result.rows[0]?.value || null;
+    const result = await db.select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, key))
+      .limit(1);
+    
+    return result[0]?.value || null;
   } catch (error) {
     console.error('Error getting setting:', error);
     throw error;
@@ -58,13 +75,15 @@ export async function getSetting(key: string): Promise<string | null> {
 
 export async function setSetting(key: string, value: string): Promise<void> {
   try {
-    await pool.query(
-      `INSERT INTO settings (key, value, updated_at) 
-       VALUES ($1, $2, CURRENT_TIMESTAMP) 
-       ON CONFLICT (key) 
-       DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-      [key, value]
-    );
+    await db.insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { 
+          value: value,
+          updatedAt: new Date()
+        }
+      });
   } catch (error) {
     console.error('Error setting setting:', error);
     throw error;
@@ -73,12 +92,14 @@ export async function setSetting(key: string, value: string): Promise<void> {
 
 export async function getAllSettings(): Promise<Record<string, string>> {
   try {
-    const result = await pool.query('SELECT key, value FROM settings');
-    const settings: Record<string, string> = {};
-    for (const row of result.rows) {
-      settings[row.key] = row.value;
+    const result = await db.select({ key: settings.key, value: settings.value })
+      .from(settings);
+    
+    const settingsObj: Record<string, string> = {};
+    for (const row of result) {
+      settingsObj[row.key] = row.value;
     }
-    return settings;
+    return settingsObj;
   } catch (error) {
     console.error('Error getting all settings:', error);
     throw error;
