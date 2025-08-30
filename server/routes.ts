@@ -55,7 +55,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = getAllSettingsFromCache();
       
       // Enhanced vector database semantic search for context
-      let previousConversations: Array<{query: string, response: string}> = [];
+      let vectorMemoryContext: Array<{
+        query: string;
+        response: string;
+        similarity: number;
+        timestamp: string;
+      }> = [];
       if (pineconeService.getConnectionStatus()) {
         try {
           console.log('🔍 Performing vector search for:', content.substring(0, 50) + '...');
@@ -77,12 +82,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Show similarity scores for debugging
             console.log('📊 Similarity scores:', similarResults.map(r => `${r.similarity.toFixed(3)}`).join(', '));
             
-            previousConversations = similarResults.map(result => ({
+            vectorMemoryContext = similarResults.map(result => ({
               query: result.query,
-              response: result.response
+              response: result.response,
+              similarity: result.similarity,
+              timestamp: result.timestamp
             }));
-            console.log('✅ Using', previousConversations.length, 'previous conversations as context');
-            console.log('📝 Context queries:', previousConversations.map(p => p.query.substring(0, 30) + '...'));
+            console.log('✅ Using', vectorMemoryContext.length, 'previous conversations as context');
+            console.log('📝 Context queries:', vectorMemoryContext.map(p => p.query.substring(0, 30) + '...'));
           } else {
             console.log('❌ No similar conversations found - proceeding without context');
           }
@@ -112,8 +119,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "System prompt not configured. Please set system prompt in settings." });
       }
 
-      // Generate AI response with previous conversations as context
-      const aiResponse = await generateChatResponse(content, previousConversations, {
+      // Generate AI response with vector memory context for optimal memory integration
+      const aiResponse = await generateChatResponse(content, vectorMemoryContext, {
         temperature: currentTemperature,
         model: currentModel,
         maxTokens: currentMaxTokens,

@@ -1,5 +1,12 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+
+export interface VectorMemoryContext {
+  query: string;
+  response: string;
+  similarity: number;
+  timestamp: string;
+}
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -17,7 +24,7 @@ export interface ChatResponse {
 
 export async function generateChatResponse(
   query: string, 
-  previousAssistantResponses: Array<{query: string, response: string}> = [],
+  vectorMemoryContext: VectorMemoryContext[] = [],
   options: { temperature?: number; model?: string; maxTokens?: number } = {},
   settings?: Record<string, string>
 ): Promise<ChatResponse> {
@@ -32,21 +39,49 @@ export async function generateChatResponse(
     if (!maxTokens) throw new Error("MaxTokens parameter is required");
     if (!settings?.systemPrompt) throw new Error("System prompt not configured in database");
     
-    // Build optimized input string
-    let input = settings.systemPrompt + "\n\n";
-    
-    // Add context only if available (avoid empty context overhead)
-    if (previousAssistantResponses.length > 0) {
-      input += "Context:\n";
-      // Limit context to prevent token overflow
-      const contextLimit = Math.min(previousAssistantResponses.length, 2);
-      for (let i = 0; i < contextLimit; i++) {
-        const prev = previousAssistantResponses[i];
-        input += `Q: ${prev.query}\nA: ${prev.response}\n\n`;
+    // Build message array with vector memory context for optimal Response API usage
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: settings.systemPrompt
       }
+    ];
+
+    // Add vector memory context as proper user/assistant message pairs
+    if (vectorMemoryContext.length > 0) {
+      // Limit context to prevent token overflow - use top 3 most relevant
+      const contextLimit = Math.min(vectorMemoryContext.length, 3);
+      
+      for (let i = 0; i < contextLimit; i++) {
+        const memory = vectorMemoryContext[i];
+        messages.push(
+          {
+            role: "user",
+            content: memory.query
+          },
+          {
+            role: "assistant", 
+            content: memory.response
+          }
+        );
+      }
+      
+      console.log(`📚 Added ${contextLimit} conversation pairs from vector memory (similarities: ${vectorMemoryContext.slice(0, contextLimit).map(m => m.similarity.toFixed(3)).join(', ')})`);
     }
-    
-    input += query;
+
+    // Add current user query
+    messages.push({
+      role: "user",
+      content: query
+    });
+
+    // For Response API, we'll convert messages to input format
+    let input = messages.map(msg => {
+      if (msg.role === 'system') return msg.content;
+      if (msg.role === 'user') return `User: ${msg.content}`;
+      if (msg.role === 'assistant') return `Assistant: ${msg.content}`;
+      return msg.content;
+    }).join('\n\n') + '\n\nAssistant:';
 
     // Optimized API call with timeout
     const response = await Promise.race([
@@ -66,7 +101,8 @@ export async function generateChatResponse(
 
     return {
       content: response.output_text || "",
-      sources: previousAssistantResponses.length > 0 ? ["Context"] : [],
+      sources: vectorMemoryContext.length > 0 ? 
+        [`Vector Memory (${vectorMemoryContext.length} conversations)`] : [],
     };
   } catch (error) {
     const duration = Date.now() - startTime;
