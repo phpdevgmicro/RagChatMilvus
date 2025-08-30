@@ -1,6 +1,6 @@
 interface SidebarProps {
   connectionStatus?: {
-    qdrant: boolean;
+    pinecone: boolean;
     openai: boolean;
   };
   dbStats?: {
@@ -76,9 +76,9 @@ export function Sidebar({
               <span className="text-sm text-foreground font-medium">Vector Storage</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${connectionStatus?.qdrant ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
-              <span className={`text-xs font-medium ${connectionStatus?.qdrant ? 'text-accent' : 'text-destructive'}`}>
-                {connectionStatus?.qdrant ? 'Connected' : 'Disconnected'}
+              <div className={`w-2 h-2 rounded-full ${connectionStatus?.pinecone ? 'bg-accent' : 'bg-destructive'} status-indicator`}></div>
+              <span className={`text-xs font-medium ${connectionStatus?.pinecone ? 'text-accent' : 'text-destructive'}`}>
+                {connectionStatus?.pinecone ? 'Connected' : 'Disconnected'}
               </span>
             </div>
           </div>

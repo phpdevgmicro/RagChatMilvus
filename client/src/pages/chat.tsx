@@ -52,7 +52,7 @@ export default function Chat() {
 
   // Fetch connection status
   const { data: connectionStatus } = useQuery<{
-    qdrant: boolean;
+    pinecone: boolean;
     openai: boolean;
   }>({
     queryKey: ["/api/status"],

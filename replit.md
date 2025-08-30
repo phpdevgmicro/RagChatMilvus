@@ -24,8 +24,8 @@ Preferred communication style: Simple, everyday language.
 - **Development Server**: Custom Vite integration for hot module replacement in development
 
 ## Data Storage Solutions
-- **Primary Database**: PostgreSQL via Neon Database serverless connection
-- **Vector Database**: Milvus for storing and searching message embeddings
+- **Primary Database**: PostgreSQL via Replit's managed database service
+- **Vector Database**: Pinecone for storing and searching message embeddings
 - **Session Storage**: PostgreSQL with connect-pg-simple for session management
 - **Schema Management**: Drizzle Kit for database migrations and schema updates
 
@@ -42,8 +42,8 @@ Preferred communication style: Simple, everyday language.
 ## External Service Integrations
 - **OpenAI API**: GPT-5 for chat completions and text-embedding-ada-002 for vector embeddings
 - **Model Context Protocol (MCP)**: External knowledge retrieval service for augmenting responses
-- **Milvus Vector Database**: Similarity search and vector storage capabilities
-- **Neon Database**: Serverless PostgreSQL hosting
+- **Pinecone Vector Database**: Similarity search and vector storage capabilities with serverless infrastructure
+- **Replit Database**: Managed PostgreSQL hosting
 
 ## Key Features
 - **Vector Search**: Similarity-based retrieval of previous conversations

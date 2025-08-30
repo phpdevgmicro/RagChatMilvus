@@ -3,11 +3,6 @@
   "out": "./drizzle",
   "dialect": "postgresql",
   "dbCredentials": {
-    "host": "$PGHOST",
-    "port": "$PGPORT",
-    "user": "$PGUSER",
-    "password": "$PGPASSWORD",
-    "database": "$PGDATABASE",
-    "ssl": false
+    "url": "$DATABASE_URL"
   }
 }

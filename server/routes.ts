@@ -5,7 +5,7 @@ import {
   generateEmbedding,
   checkOpenAIConnection,
 } from "./services/openai";
-import { qdrantService, type ChatMessage } from "./services/qdrant";
+import { pineconeService, type ChatMessage } from "./services/pinecone";
 import { getAllSettingsFromCache, setSetting } from "./services/database";
 import { randomUUID } from "crypto";
 
@@ -15,7 +15,7 @@ let chatMessages: ChatMessage[] = [];
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize services
   try {
-    await qdrantService.connect();
+    await pineconeService.connect();
   } catch (error) {
     console.error("Service initialization error:", error);
   }
@@ -56,7 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Enhanced vector database semantic search for context
       let previousConversations: Array<{query: string, response: string}> = [];
-      if (qdrantService.getConnectionStatus()) {
+      if (pineconeService.getConnectionStatus()) {
         try {
           console.log('🔍 Performing vector search for:', content.substring(0, 50) + '...');
           
@@ -70,7 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('📊 Generated embedding with', queryEmbedding.length, 'dimensions');
           
           // Use adaptive threshold
-          const similarResults = await qdrantService.searchSimilar(queryEmbedding, threshold, 5);
+          const similarResults = await pineconeService.searchSimilar(queryEmbedding, threshold, 5);
           console.log('🎯 Vector search found', similarResults.length, 'similar conversations');
           
           if (similarResults.length > 0) {
@@ -90,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("❌ Vector search failed:", error);
         }
       } else {
-        console.log('⚠️  Vector database not connected - no semantic search');
+        console.log('⚠️  Pinecone vector database not connected - no semantic search');
       }
       
       // ALWAYS use database settings only - never use request parameters
@@ -168,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (userMessage && userMessage.role === "user") {
             const embedding = await generateEmbedding(message.content);
 
-            await qdrantService.insertVector({
+            await pineconeService.insertVector({
               id: randomUUID(),
               query: userMessage.content,
               response: message.content,
@@ -187,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Search for similar vectors to find and delete the specific one
             try {
               const embedding = await generateEmbedding(message.content);
-              const similarResults = await qdrantService.searchSimilar(embedding, 0.95, 5);
+              const similarResults = await pineconeService.searchSimilar(embedding, 0.95, 5);
               
               // Find the exact match by comparing the response content
               const exactMatch = similarResults.find(result => 
@@ -196,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               );
               
               if (exactMatch) {
-                await qdrantService.deleteVector(exactMatch.id);
+                await pineconeService.deleteVector(exactMatch.id);
               }
             } catch (error) {
               console.error("Error deleting from vector database:", error);
@@ -221,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ]);
 
       const status = {
-        qdrant: qdrantService.getConnectionStatus(),
+        pinecone: pineconeService.getConnectionStatus(),
         openai:
           openaiStatus.status === "fulfilled" ? openaiStatus.value : false,
       };
@@ -236,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get database statistics
   app.get("/api/stats", async (req, res) => {
     try {
-      const stats = await qdrantService.getCollectionStats();
+      const stats = await pineconeService.getCollectionStats();
       const lastMessage = chatMessages[chatMessages.length - 1];
 
       res.json({
